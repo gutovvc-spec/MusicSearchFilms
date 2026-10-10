@@ -1,4 +1,5 @@
-const CACHE_NAME = "music-search-films-v1";
+const CACHE_PREFIX = "music-search-films-";
+const CACHE_NAME = `${CACHE_PREFIX}v1`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -22,12 +23,14 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((cacheNames) =>
       Promise.all(
         cacheNames
-          .filter((cacheName) => cacheName !== CACHE_NAME)
+          .filter(
+            (cacheName) =>
+              cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME,
+          )
           .map((cacheName) => caches.delete(cacheName)),
       ),
-    ),
+    ).then(() => self.clients.claim()),
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
@@ -47,8 +50,11 @@ self.addEventListener("fetch", (event) => {
       fetch(request)
         .then((response) => {
           if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
+            event.waitUntil(
+              caches
+                .open(CACHE_NAME)
+                .then((cache) => cache.put("./index.html", response.clone())),
+            );
           }
           return response;
         })
@@ -72,8 +78,11 @@ self.addEventListener("fetch", (event) => {
         cachedResponse ||
         fetch(request).then((response) => {
           if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            event.waitUntil(
+              caches
+                .open(CACHE_NAME)
+                .then((cache) => cache.put(request, response.clone())),
+            );
           }
           return response;
         }),
