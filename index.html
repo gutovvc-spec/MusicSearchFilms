@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b1220" />
+    <meta
+      name="description"
+      content="Fleetwise — plataforma corporativa para gestão inteligente de frotas."
+    />
+    <title>Fleetwise — Gestão de Frotas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              fleet: { blue: "#4d8dff", cyan: "#55d6e8", ink: "#0b1220" },
+            },
+            fontFamily: {
+              sans: ["DM Sans", "sans-serif"],
+              display: ["Manrope", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="app-backdrop" aria-hidden="true"></div>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <a class="brand" href="#" aria-label="Fleetwise início" data-page="dashboard">
+          <span class="brand-mark"><i data-lucide="navigation"></i></span>
+          <span class="brand-copy"><strong>fleetwise</strong><small>FLEET INTELLIGENCE</small></span>
+        </a>
+
+        <div class="workspace-label">WORKSPACE</div>
+        <nav class="main-nav" aria-label="Navegação principal">
+          <button class="nav-item active" data-page="dashboard"><i data-lucide="layout-dashboard"></i><span>Visão geral</span></button>
+          <button class="nav-item" data-page="vehicles"><i data-lucide="truck"></i><span>Veículos</span><span class="nav-count" id="vehicle-count">08</span></button>
+          <button class="nav-item" data-page="drivers"><i data-lucide="contact-round"></i><span>Motoristas</span></button>
+          <button class="nav-item" data-page="maintenance"><i data-lucide="wrench"></i><span>Manutenção</span><span class="nav-dot"></span></button>
+          <button class="nav-item" data-page="fuel"><i data-lucide="fuel"></i><span>Abastecimento</span></button>
+          <button class="nav-item" data-page="reports"><i data-lucide="chart-no-axes-combined"></i><span>Relatórios</span></button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="support-card">
+            <div class="support-icon"><i data-lucide="life-buoy"></i></div>
+            <strong>Precisa de ajuda?</strong>
+            <span>Fale com nosso time de suporte.</span>
+            <a href="mailto:suporte@fleetwise.com">Acessar suporte <i data-lucide="arrow-up-right"></i></a>
+          </div>
+          <button class="profile-button" aria-label="Perfil do usuário">
+            <span class="avatar">MC</span>
+            <span class="profile-copy"><strong>Marina Costa</strong><small>Administradora</small></span>
+            <i data-lucide="chevrons-up-down"></i>
+          </button>
+          <div class="sidebar-version">FLEETWISE <span>•</span> V1.0.0</div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="topbar-left">
+            <button class="icon-button mobile-menu" id="menu-toggle" aria-label="Abrir menu"><i data-lucide="menu"></i></button>
+            <div class="breadcrumbs"><span>Workspace</span><i data-lucide="chevron-right"></i><strong id="breadcrumb-page">Visão geral</strong></div>
+          </div>
+          <div class="topbar-actions">
+            <span class="live-status"><span></span> Operação ativa</span>
+            <button class="icon-button notification-button" id="notification-button" aria-label="Ver alertas">
+              <i data-lucide="bell"></i><span class="notification-indicator"></span>
+            </button>
+            <div class="topbar-divider"></div>
+            <div class="topbar-date" id="topbar-date"></div>
+          </div>
+        </header>
+        <div class="content-area" id="app-content" aria-live="polite"></div>
+        <footer class="app-footer"><span>© <span id="copyright-year"></span> Fleetwise Technologies</span><span>Inteligência para cada quilômetro.</span></footer>
+      </main>
+    </div>
+    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <div class="modal-root" id="modal-root"></div>
+  </body>
+</html>
