@@ -1,15 +1,9 @@
 /*
- * Configuração:
- * 1. Ative "YouTube Data API v3" em https://console.cloud.google.com/.
- * 2. Crie uma chave e restrinja-a ao endereço do Live Server, por exemplo
- *    http://127.0.0.1:5500/*, e somente à YouTube Data API v3.
- * 3. Cole a chave abaixo. Como ela é usada no navegador, mantenha as restrições
- *    de site e API ativas no Google Cloud.
+ * A chave da YouTube Data API fica no servidor Vercel, na variável YOUTUBE_API_KEY.
+ * Veja DEPLOY.md para configurar a variável e publicar o site.
  */
 
-const YOUTUBE_API_KEY = "AIzaSyCtCClONMJJnTfWWGRJeORZHEYn52nkXEA";
-const YOUTUBE_API_ENDPOINT = "https://www.googleapis.com/youtube/v3/search";
-const YOUTUBE_SEARCH_LIMIT = 10;
+const YOUTUBE_API_ENDPOINT = "/api/youtube-search";
 const MAX_VIDEO_RESULTS = 10;
 const UNOFFICIAL_VIDEO_MARKERS = [
   "cover",
@@ -53,6 +47,12 @@ const elements = {
   playerStatus: document.querySelector("#youtube-status"),
   youtubeFallback: document.querySelector("#youtube-fallback"),
 };
+
+let currentVideos = [];
+let youtubePlayer = null;
+let youtubeApiPromise = null;
+let activeVideoIndex = -1;
+let playbackGeneration = 0;
 
 function showMessage(message) {
   elements.message.textContent = message;
@@ -100,17 +100,7 @@ function getOfficialMatchScore(video) {
 }
 
 async function searchYouTube(query) {
-  const parameters = new URLSearchParams({
-    key: YOUTUBE_API_KEY,
-    part: "snippet",
-    q: query,
-    type: "video",
-    videoEmbeddable: "true",
-    videoSyndicated: "true",
-    maxResults: String(YOUTUBE_SEARCH_LIMIT),
-    regionCode: "BR",
-    relevanceLanguage: "pt",
-  });
+  const parameters = new URLSearchParams({ q: query });
   const response = await fetch(`${YOUTUBE_API_ENDPOINT}?${parameters}`);
   const data = await response.json();
 
@@ -119,8 +109,11 @@ async function searchYouTube(query) {
     if (reason === "quotaExceeded") {
       throw new Error("A cota diária gratuita da busca do YouTube acabou. Tente novamente amanhã.");
     }
+    if (response.status === 503) {
+      throw new Error("A busca ainda não foi configurada no Vercel. Adicione a variável YOUTUBE_API_KEY nas configurações do projeto e faça um novo deploy.");
+    }
     if (response.status === 403) {
-      throw new Error("O Google recusou a chave. Confira se a YouTube Data API v3 está ativada e se a chave permite o endereço do Live Server.");
+      throw new Error("O Google recusou a chave. Confira se a YouTube Data API v3 está ativada e se a chave do servidor está restringida a essa API.");
     }
     throw new Error(data.error?.message || `O YouTube retornou o erro ${response.status}.`);
   }
@@ -148,19 +141,107 @@ async function findMovieVideos(movieTitle) {
     .slice(0, MAX_VIDEO_RESULTS);
 }
 
-function playVideo(video) {
-  const videoId = video.id.videoId;
-  const title = video.snippet.title;
+function loadYouTubePlayerApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeApiPromise) return youtubeApiPromise;
 
+  youtubeApiPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    script.async = true;
+    script.onerror = () => reject(new Error("Não foi possível carregar o player do YouTube."));
+    window.onYouTubeIframeAPIReady = () => resolve(window.YT);
+    document.head.append(script);
+  });
+
+  return youtubeApiPromise;
+}
+
+function updateActiveVideo(video) {
+  const title = video.snippet.title;
   elements.player.hidden = false;
   elements.playerTitle.textContent = title;
-  elements.playerStatus.textContent = `Canal: ${video.snippet.channelTitle}`;
-  elements.playerFrame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
-  elements.playerFrame.title = `YouTube: ${title}`;
-  elements.playerFrame.hidden = false;
-  elements.youtubeFallback.href = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+  elements.playerStatus.textContent = `Canal: ${video.snippet.channelTitle} · carregando player...`;
+  elements.youtubeFallback.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.id.videoId)}`;
   elements.youtubeFallback.hidden = false;
-  elements.player.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function playVideoAtIndex(index, generation) {
+  if (generation !== playbackGeneration) return;
+
+  if (index >= currentVideos.length) {
+    elements.playerStatus.textContent = "O YouTube bloqueou a reprodução incorporada dos resultados encontrados.";
+    elements.youtubeFallback.hidden = false;
+    return;
+  }
+
+  activeVideoIndex = index;
+  const video = currentVideos[index];
+  updateActiveVideo(video);
+
+  try {
+    const youtube = await loadYouTubePlayerApi();
+    if (generation !== playbackGeneration) return;
+
+    if (!youtubePlayer) {
+      youtubePlayer = new youtube.Player(elements.playerFrame, {
+        width: "100%",
+        height: "100%",
+        videoId: video.id.videoId,
+        playerVars: {
+          autoplay: 1,
+          enablejsapi: 1,
+          playsinline: 1,
+          origin: window.location.origin,
+        },
+        events: {
+          onReady: (event) => {
+            if (generation === playbackGeneration) {
+              elements.playerStatus.textContent = `Canal: ${video.snippet.channelTitle} · use os controles para reproduzir`;
+              event.target.playVideo();
+            }
+          },
+          onError: handleYouTubePlayerError,
+        },
+      });
+    } else {
+      elements.playerStatus.textContent = `Canal: ${video.snippet.channelTitle} · carregando vídeo...`;
+      youtubePlayer.loadVideoById(video.id.videoId);
+    }
+
+    elements.player.scrollIntoView({ behavior: "smooth", block: "center" });
+  } catch (error) {
+    elements.playerStatus.textContent = error.message;
+    elements.youtubeFallback.hidden = false;
+  }
+}
+
+function handleYouTubePlayerError(event) {
+  const errorCode = event.data;
+  const failedIndex = activeVideoIndex;
+  const failedGeneration = playbackGeneration;
+  const canTryNextVideo = [2, 5, 100, 101, 150].includes(errorCode);
+
+  if (canTryNextVideo && failedIndex + 1 < currentVideos.length) {
+    elements.playerStatus.textContent = "Este vídeo não pode ser reproduzido aqui. Tentando o próximo resultado...";
+    window.setTimeout(
+      () => playVideoAtIndex(failedIndex + 1, failedGeneration),
+      300,
+    );
+    return;
+  }
+
+  elements.playerStatus.textContent =
+    errorCode === 101 || errorCode === 150
+      ? "O dono deste vídeo não permite reprodução em outros sites. Abra-o no YouTube."
+      : `O player do YouTube retornou o erro ${errorCode}. Tente abrir o vídeo no YouTube.`;
+  elements.youtubeFallback.hidden = false;
+}
+
+function playVideo(video, index) {
+  playbackGeneration += 1;
+  elements.player.hidden = false;
+  playVideoAtIndex(index, playbackGeneration);
 }
 
 function renderVideos(videos, movieTitle) {
@@ -214,23 +295,16 @@ function renderVideos(videos, movieTitle) {
   elements.results.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-let currentVideos = [];
-
 elements.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const movieTitle = elements.movieTitle.value.trim();
   if (!movieTitle) return;
 
-  if (!YOUTUBE_API_KEY || YOUTUBE_API_KEY === "COLE_SUA_CHAVE_RESTRITA_AQUI") {
-    showMessage("Configure sua chave restrita da YouTube Data API no início de app.js para buscar vídeos.");
-    return;
-  }
-
   hideMessage();
   elements.results.hidden = true;
   elements.player.hidden = true;
-  elements.playerFrame.hidden = true;
-  elements.playerFrame.removeAttribute("src");
+  playbackGeneration += 1;
+  youtubePlayer?.stopVideo();
   elements.youtubeFallback.hidden = true;
   setLoading(true);
 
@@ -252,5 +326,5 @@ elements.videoList.addEventListener("click", (event) => {
   if (!button) return;
 
   const video = currentVideos[Number(button.dataset.videoIndex)];
-  if (video) playVideo(video);
+  if (video) playVideo(video, Number(button.dataset.videoIndex));
 });

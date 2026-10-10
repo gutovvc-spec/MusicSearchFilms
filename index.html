@@ -8,7 +8,7 @@
       name="description"
       content="Encontre e assista no YouTube a músicas e trilhas sonoras de filmes."
     />
-    <title>Frame — músicas de filmes no YouTube</title>
+    <title>Music Search Films</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -23,9 +23,9 @@
     <div class="ambient ambient-two" aria-hidden="true"></div>
 
     <header class="topbar">
-      <a class="brand" href="./" aria-label="Frame — início">
-        <span class="brand-icon" aria-hidden="true">f</span>
-        <span>frame<span class="brand-period">.</span></span>
+      <a class="brand" href="./" aria-label="Music Search Films — início">
+        <span class="brand-icon" aria-hidden="true">M</span>
+        <span>Music Search Films<span class="brand-period">.</span></span>
       </a>
     </header>
 
@@ -65,8 +65,8 @@
           </p>
         </aside>
         <p class="youtube-note">
-          Configure uma chave da YouTube Data API no <code>app.js</code>, restringindo-a
-          ao seu site e à YouTube Data API v3 no Google Cloud. O YouTube pode exibir anúncios.
+          A busca usa uma chave configurada com segurança no servidor do Vercel.
+          O YouTube pode exibir anúncios.
         </p>
       </section>
 
@@ -94,14 +94,7 @@
             </div>
           </div>
           <div class="youtube-frame-wrap">
-            <iframe
-              id="youtube-frame"
-              title="Reprodutor do YouTube"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              referrerpolicy="strict-origin-when-cross-origin"
-              allowfullscreen
-              hidden
-            ></iframe>
+            <div id="youtube-frame"></div>
           </div>
           <a
             class="youtube-fallback"
@@ -117,7 +110,7 @@
 
       <footer class="footer">
         <span>Feito para quem leva a música do cinema para casa.</span>
-        <span>Busca e reprodução pelo YouTube</span>
+        <span>Powered by Vinicios Candatten</span>
       </footer>
     </main>
   </body>
