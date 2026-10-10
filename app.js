@@ -10,6 +10,30 @@
 const YOUTUBE_API_KEY = "AIzaSyCtCClONMJJnTfWWGRJeORZHEYn52nkXEA";
 const YOUTUBE_API_ENDPOINT = "https://www.googleapis.com/youtube/v3/search";
 const YOUTUBE_SEARCH_LIMIT = 10;
+const MAX_VIDEO_RESULTS = 10;
+const UNOFFICIAL_VIDEO_MARKERS = [
+  "cover",
+  "karaoke",
+  "tribute",
+  "fan made",
+  "fanmade",
+  "reaction",
+  "remix",
+  "slowed",
+  "reverb",
+  "nightcore",
+  "8d audio",
+];
+const OFFICIAL_VIDEO_MARKERS = [
+  "official",
+  "vevo",
+  "soundtrack",
+  "original song",
+  "original motion picture",
+  "music video",
+  "provided to youtube by",
+  " - topic",
+];
 
 const elements = {
   form: document.querySelector("#movie-form"),
@@ -49,10 +73,30 @@ function setLoading(isLoading, message = "Buscando músicas no YouTube...") {
 
 function getSearchQueries(movieTitle) {
   return [
-    `songs featured in ${movieTitle} movie`,
-    `music from ${movieTitle} movie`,
-    `${movieTitle} soundtrack songs`,
+    `${movieTitle} movie official soundtrack song`,
+    `${movieTitle} original song from the movie official audio`,
   ];
+}
+
+function normalizeSearchText(value) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function getOfficialMatchScore(video) {
+  const title = normalizeSearchText(video.snippet.title);
+  const channel = normalizeSearchText(video.snippet.channelTitle);
+  const description = normalizeSearchText(video.snippet.description || "");
+  const metadata = `${title} ${channel} ${description}`;
+
+  if (UNOFFICIAL_VIDEO_MARKERS.some((marker) => metadata.includes(marker))) return 0;
+
+  return OFFICIAL_VIDEO_MARKERS.reduce(
+    (score, marker) => score + (metadata.includes(marker) ? 1 : 0),
+    0,
+  );
 }
 
 async function searchYouTube(query) {
@@ -90,10 +134,18 @@ async function findMovieVideos(movieTitle) {
 
   for (const video of results.flat()) {
     const id = video.id?.videoId;
-    if (id && !videos.has(id)) videos.set(id, video);
+    const officialMatchScore = getOfficialMatchScore(video);
+    if (id && officialMatchScore > 0) {
+      const existing = videos.get(id);
+      if (!existing || existing.officialMatchScore < officialMatchScore) {
+        videos.set(id, { ...video, officialMatchScore });
+      }
+    }
   }
 
-  return Array.from(videos.values());
+  return Array.from(videos.values())
+    .sort((first, second) => second.officialMatchScore - first.officialMatchScore)
+    .slice(0, MAX_VIDEO_RESULTS);
 }
 
 function playVideo(video) {
@@ -115,7 +167,7 @@ function renderVideos(videos, movieTitle) {
   elements.videoList.replaceChildren();
   elements.resultsHeading.textContent = `Vídeos sobre ${movieTitle}`;
   elements.resultsCaption.textContent =
-    `${videos.length} resultados do YouTube. Confira o título e o canal: a busca não confirma em qual cena cada música toca.`;
+    `${videos.length} vídeos com sinais de lançamento oficial; covers, remixes e vídeos de fãs são removidos. A API não consegue confirmar 100% a origem nem a cena do filme.`;
 
   for (const [index, video] of videos.entries()) {
     const snippet = video.snippet;
