@@ -3,128 +3,112 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#110d10" />
+    <meta name="theme-color" content="#101010" />
     <meta
       name="description"
-      content="Ampernet Frotas — gestão inteligente de frotas corporativas."
+      content="Encontre trilhas sonoras de filmes e crie playlists no Spotify."
     />
-    <title>Ampernet Frotas — Gestão de Frotas</title>
+    <title>Frame — trilhas sonoras no Spotify</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              fleet: { blue: "#e53945", cyan: "#ff858a", ink: "#110d10" },
-            },
-            fontFamily: {
-              sans: ["DM Sans", "sans-serif"],
-              display: ["Manrope", "sans-serif"],
-            },
-          },
-        },
-      };
-    </script>
-    <link rel="stylesheet" href="./styles.css" />
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script type="module" src="./app.js"></script>
+    <link rel="stylesheet" href="./style.css" />
+    <script src="./app.js" defer></script>
   </head>
   <body>
-    <div class="app-backdrop" aria-hidden="true"></div>
-    <section class="login-screen" id="login-screen">
-      <div class="login-panel">
-        <a class="login-brand" href="#" aria-label="Ampernet Frotas">
-          <span class="login-brand-mark"><i data-lucide="radio-tower"></i></span>
-          <span class="login-brand-name">Ampernet</span>
-          <span class="login-brand-divider"></span>
-          <span class="login-brand-product">GESTÃO<br />DE FROTAS</span>
-        </a>
-        <div class="login-content">
-          <span class="login-kicker"><span></span> PORTAL CORPORATIVO</span>
-          <h1>Bem-vindo à<br /><span>sua operação.</span></h1>
-          <p>Identifique-se para acessar o painel de gestão da frota Ampernet.</p>
-          <form id="login-form" class="login-form">
-            <label for="login-name">Como podemos chamar você?</label>
-            <div class="login-input-wrap">
-              <i data-lucide="user-round"></i>
-              <input id="login-name" name="name" type="text" placeholder="Digite seu nome completo" autocomplete="name" minlength="2" maxlength="80" required />
-            </div>
-            <p class="login-error" id="login-error" role="alert" hidden></p>
-            <button class="login-submit" type="submit">Acessar painel <i data-lucide="arrow-right"></i></button>
-          </form>
-          <div class="login-note"><i data-lucide="info"></i><span>Seu nome será lembrado neste navegador. Não é necessário informar e-mail ou senha.</span></div>
-        </div>
-        <div class="login-footer"><span>© <span id="login-year"></span> Ampernet</span><span>Inteligência para cada quilômetro.</span></div>
-      </div>
-      <div class="login-aside">
-        <div class="login-aside-badge"><span></span> GESTÃO INTELIGENTE DE FROTAS</div>
-        <div class="login-aside-copy">
-          <span>VISIBILIDADE DE PONTA A PONTA</span>
-          <h2>Cada rota.<br />Sob controle.</h2>
-          <p>Veículos, equipes e operação conectados em um só lugar.</p>
-        </div>
-        <div class="login-aside-bottom"><span>PLATAFORMA AMPERNET</span><span>01 — OPERAÇÃO</span></div>
-      </div>
-    </section>
-    <div class="app-shell" id="app-shell" hidden>
-      <aside class="sidebar" id="sidebar">
-        <a class="brand" href="#" aria-label="Ampernet início" data-page="dashboard">
-          <span class="brand-mark"><i data-lucide="radio-tower"></i></span>
-          <span class="brand-copy"><strong>Ampernet</strong><small>GESTÃO DE FROTAS</small></span>
-        </a>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
 
-        <div class="workspace-label">WORKSPACE</div>
-        <nav class="main-nav" aria-label="Navegação principal">
-          <button class="nav-item active" data-page="dashboard"><i data-lucide="layout-dashboard"></i><span>Visão geral</span></button>
-          <button class="nav-item" data-page="vehicles"><i data-lucide="truck"></i><span>Veículos</span><span class="nav-count" id="vehicle-count">08</span></button>
-          <button class="nav-item" data-page="drivers"><i data-lucide="contact-round"></i><span>Motoristas</span></button>
-          <button class="nav-item" data-page="maintenance"><i data-lucide="wrench"></i><span>Manutenção</span><span class="nav-dot"></span></button>
-          <button class="nav-item" data-page="fuel"><i data-lucide="fuel"></i><span>Abastecimento</span></button>
-          <button class="nav-item" data-page="reports"><i data-lucide="chart-no-axes-combined"></i><span>Relatórios</span></button>
-        </nav>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Frame — início">
+        <span class="brand-icon" aria-hidden="true">f</span>
+        <span>frame<span class="brand-period">.</span></span>
+      </a>
+      <div class="account">
+        <span class="account-status" id="account-status">Spotify desconectado</span>
+        <button class="button button-connect" id="connect-button" type="button">
+          <span class="spotify-mark" aria-hidden="true">●</span>
+          Conectar ao Spotify
+        </button>
+        <button class="button button-quiet" id="disconnect-button" type="button" hidden>
+          Desconectar
+        </button>
+      </div>
+    </header>
 
-        <div class="sidebar-bottom">
-          <div class="support-card">
-            <div class="support-icon"><i data-lucide="life-buoy"></i></div>
-            <strong>Precisa de ajuda?</strong>
-            <span>Fale com nosso time de suporte.</span>
-            <a href="mailto:suporte@ampernet.com.br">Acessar suporte <i data-lucide="arrow-up-right"></i></a>
-          </div>
-          <button class="profile-button" id="user-profile" aria-label="Sair e trocar usuário" title="Sair e trocar usuário">
-            <span class="avatar" id="user-avatar">AM</span>
-            <span class="profile-copy"><strong id="user-name">Usuário</strong><small>Sair e trocar usuário</small></span>
-            <i data-lucide="chevrons-up-down"></i>
+    <main class="page">
+      <section class="hero" aria-labelledby="page-title">
+        <p class="eyebrow"><span class="eyebrow-line"></span> CINEMA ENCONTRA MÚSICA</p>
+        <h1 id="page-title">O filme acaba.<br />A música <span>fica.</span></h1>
+        <p class="intro">
+          Encontre músicas associadas a um filme e reúna as faixas em uma playlist
+          pronta para ouvir no Spotify.
+        </p>
+
+        <form class="search-form" id="movie-form">
+          <label class="visually-hidden" for="movie-title">Nome do filme</label>
+          <span class="search-icon" aria-hidden="true"></span>
+          <input
+            id="movie-title"
+            name="movie"
+            type="search"
+            placeholder="Ex.: Interestelar, La La Land..."
+            autocomplete="off"
+            maxlength="120"
+            required
+          />
+          <button class="button button-generate" id="generate-button" type="submit">
+            Gerar playlist <span aria-hidden="true">↗</span>
           </button>
-          <div class="sidebar-version">AMPERNET <span>•</span> V1.0.0</div>
-        </div>
-      </aside>
+        </form>
+        <p class="form-hint" id="form-hint">Conecte sua conta do Spotify para começar.</p>
+        <aside class="service-note" aria-label="Informações sobre contas Spotify Free">
+          <span class="service-note-icon" aria-hidden="true">i</span>
+          <p>
+            <strong>Funciona com Spotify Free.</strong> Você pode criar e salvar playlists,
+            mas a reprodução acontece no app do Spotify. A busca usa somente faixas do
+            Spotify e é aproximada: ele não informa oficialmente em quais cenas cada
+            música toca. Para testar em modo de desenvolvimento, o proprietário do app
+            precisa ter Premium e adicionar cada conta de teste em
+            <em>Users Management</em> no Dashboard.
+          </p>
+        </aside>
+      </section>
 
-      <main class="main-content">
-        <header class="topbar">
-          <div class="topbar-left">
-            <button class="icon-button mobile-menu" id="menu-toggle" aria-label="Abrir menu"><i data-lucide="menu"></i></button>
-            <div class="breadcrumbs"><span>Workspace</span><i data-lucide="chevron-right"></i><strong id="breadcrumb-page">Visão geral</strong></div>
+      <section class="loading" id="loading" aria-live="polite" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="loading-label">Procurando músicas do filme...</span>
+      </section>
+
+      <section class="message" id="message" role="status" hidden></section>
+
+      <section class="results" id="results" aria-labelledby="results-heading" hidden>
+        <div class="results-heading">
+          <div>
+            <p class="eyebrow">SUA PRÓXIMA SESSÃO</p>
+            <h2 id="results-heading">Músicas do filme</h2>
           </div>
-          <div class="topbar-actions">
-            <span class="live-status"><span></span> Operação ativa</span>
-            <button class="icon-button notification-button" id="notification-button" aria-label="Ver alertas">
-              <i data-lucide="bell"></i><span class="notification-indicator"></span>
-            </button>
-            <div class="topbar-divider"></div>
-            <div class="topbar-date" id="topbar-date"></div>
-          </div>
-        </header>
-        <div class="content-area" id="app-content" aria-live="polite"></div>
-        <footer class="app-footer"><span>© <span id="copyright-year"></span> Ampernet</span><span>Inteligência para cada quilômetro.</span></footer>
-      </main>
-    </div>
-    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
-    <div class="modal-root" id="modal-root"></div>
+          <a
+            class="button button-open"
+            id="playlist-link"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Abrir no Spotify <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+        <p class="playlist-caption" id="playlist-caption"></p>
+        <div class="track-list" id="track-list"></div>
+      </section>
+
+      <footer class="footer">
+        <span>Feito para quem leva a música do cinema para casa.</span>
+        <span>Reproduzido pelo Spotify</span>
+      </footer>
+    </main>
   </body>
 </html>

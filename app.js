@@ -1,713 +1,441 @@
-const STORAGE_KEY = "ampernet-fleet-data-v2";
-const LEGACY_STORAGE_KEY = "fleetwise-demo-v1";
-const USER_STORAGE_KEY = "ampernet-fleet-user";
-let currentUser = "";
-const initialData = {
-  vehicles: [],
-  drivers: [],
-  maintenance: [],
-  fuel: [],
-  activities: [],
+/*
+ * Configuração do Spotify:
+ * 1. Crie um app em https://developer.spotify.com/dashboard.
+ * 2. Copie o Client ID e informe-o em SPOTIFY_CLIENT_ID abaixo.
+ * 3. Em Settings > Redirect URIs, adicione a URL exata deste app no Live Server,
+ *    por exemplo: http://127.0.0.1:5500/index.html
+ *    A URL usada para abrir esta página deve ser idêntica à cadastrada.
+ * Contas Spotify Free podem criar playlists; no modo de desenvolvimento, o
+ * proprietário do app precisa de Premium e as contas de teste devem ser permitidas.
+ * Este app usa Authorization Code com PKCE; não crie nem exponha um Client Secret.
+ */
+
+const SPOTIFY_CLIENT_ID = "b06784a9d22243c78f5dc55d9f8af263";
+const REDIRECT_URI = `${window.location.origin}${window.location.pathname}`;
+const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
+const API_BASE = "https://api.spotify.com/v1";
+const TOKEN_STORAGE_KEY = "frame-spotify-token";
+const VERIFIER_STORAGE_KEY = "frame-spotify-verifier";
+const STATE_STORAGE_KEY = "frame-spotify-state";
+const SCOPES = ["playlist-modify-private", "user-read-private"];
+const MAX_PLAYLIST_TRACKS = 100;
+const IGNORED_TITLE_WORDS = new Set(["a", "as", "o", "os", "de", "do", "da", "dos", "das", "e", "the", "of", "and", "in", "to"]);
+
+const elements = {
+  accountStatus: document.querySelector("#account-status"),
+  connectButton: document.querySelector("#connect-button"),
+  disconnectButton: document.querySelector("#disconnect-button"),
+  form: document.querySelector("#movie-form"),
+  movieTitle: document.querySelector("#movie-title"),
+  generateButton: document.querySelector("#generate-button"),
+  formHint: document.querySelector("#form-hint"),
+  loading: document.querySelector("#loading"),
+  loadingLabel: document.querySelector("#loading-label"),
+  message: document.querySelector("#message"),
+  results: document.querySelector("#results"),
+  playlistLink: document.querySelector("#playlist-link"),
+  playlistCaption: document.querySelector("#playlist-caption"),
+  trackList: document.querySelector("#track-list"),
 };
 
-const pageTitles = {
-  dashboard: "Visão geral",
-  vehicles: "Gestão de veículos",
-  drivers: "Controle de motoristas",
-  maintenance: "Manutenção e oficinas",
-  fuel: "Abastecimento",
-  reports: "Relatórios gerenciais",
-};
-const icons = {
-  dashboard: "layout-dashboard",
-  vehicles: "truck",
-  drivers: "contact-round",
-  maintenance: "wrench",
-  fuel: "fuel",
-  reports: "chart-no-axes-combined",
-};
+function getStoredToken() {
+  const saved = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+  if (!saved) return null;
 
-let data = loadData();
-let currentPage = "dashboard";
-let tableSearch = "";
-let activeFilters = {};
-let toastTimer;
-
-function loadData() {
   try {
-    // Remove os dados demonstrativos e cadastros locais da versao anterior.
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? { ...structuredClone(initialData), ...JSON.parse(saved) } : structuredClone(initialData);
-  } catch (error) {
-    console.error("Não foi possível carregar os dados salvos da frota.", error);
-    return structuredClone(initialData);
+    return JSON.parse(saved);
+  } catch {
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    return null;
   }
 }
 
-function saveData() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (error) {
-    console.error("Não foi possível salvar os dados da frota no navegador.", error);
-    showToast("Falha ao salvar no armazenamento local.", true);
+function saveToken(token) {
+  sessionStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(token));
+}
+
+function updateAccountUi() {
+  const token = getStoredToken();
+  const connected = Boolean(
+    token?.accessToken && (token.expiresAt > Date.now() || token.refreshToken),
+  );
+
+  elements.accountStatus.textContent = connected ? "Spotify conectado" : "Spotify desconectado";
+  elements.connectButton.hidden = connected;
+  elements.disconnectButton.hidden = !connected;
+  elements.generateButton.disabled = !connected;
+  elements.movieTitle.disabled = !connected;
+  elements.formHint.textContent = connected
+    ? "Vamos buscar faixas relacionadas ao filme no Spotify."
+    : "Conecte sua conta do Spotify para começar.";
+}
+
+function showMessage(text) {
+  elements.message.textContent = text;
+  elements.message.hidden = false;
+}
+
+function hideMessage() {
+  elements.message.textContent = "";
+  elements.message.hidden = true;
+}
+
+function setLoading(isLoading, label = "Procurando músicas do filme...") {
+  elements.loading.hidden = !isLoading;
+  elements.loadingLabel.textContent = label;
+  elements.generateButton.disabled = isLoading || !getStoredToken();
+  elements.connectButton.disabled = isLoading;
+}
+
+function createRandomString(length) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const randomValues = new Uint8Array(length);
+  crypto.getRandomValues(randomValues);
+  return Array.from(randomValues, (value) => alphabet[value % alphabet.length]).join("");
+}
+
+async function createCodeChallenge(verifier) {
+  const bytes = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const binary = String.fromCharCode(...new Uint8Array(digest));
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function connectToSpotify() {
+  if (!SPOTIFY_CLIENT_ID || SPOTIFY_CLIENT_ID === "INSIRA_SEU_CLIENT_ID_AQUI") {
+    showMessage("Insira seu Client ID do Spotify no início do arquivo app.js antes de conectar.");
+    return;
   }
-}
 
-function escapeHtml(value = "") {
-  return String(value).replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[char]);
-}
-function money(value) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0);
-}
-function number(value) {
-  return new Intl.NumberFormat("pt-BR").format(Number(value) || 0);
-}
-function formatDate(value) {
-  if (!value) return "—";
-  const parsed = new Date(`${value}T12:00:00`);
-  return Number.isNaN(parsed.getTime()) ? escapeHtml(value) : new Intl.DateTimeFormat("pt-BR").format(parsed);
-}
-function daysUntil(value) {
-  const target = new Date(`${value}T00:00:00`);
-  return Math.ceil((target - new Date(new Date().toDateString())) / 86400000);
-}
-function driverName(id) {
-  return data.drivers.find((driver) => driver.id === id)?.name || "Não atribuído";
-}
-function vehicle(id) {
-  return data.vehicles.find((item) => item.id === id);
-}
-function vehicleName(id) {
-  const item = vehicle(id);
-  return item ? `${item.model} · ${item.plate}` : "Veículo removido";
-}
-function getTimeGreeting() {
-  const hour = new Date().getHours();
-  if (hour >= 5 && hour < 12) return "Bom dia";
-  if (hour >= 12 && hour < 18) return "Boa tarde";
-  return "Boa noite";
-}
-function setIcons() {
-  if (window.lucide) window.lucide.createIcons();
-}
+  const verifier = createRandomString(64);
+  const state = createRandomString(24);
+  sessionStorage.setItem(VERIFIER_STORAGE_KEY, verifier);
+  sessionStorage.setItem(STATE_STORAGE_KEY, state);
 
-function showToast(message, isError = false) {
-  const region = document.querySelector("#toast-region");
-  const toast = document.createElement("div");
-  toast.className = `toast${isError ? " error" : ""}`;
-  toast.innerHTML = `<i data-lucide="${isError ? "circle-alert" : "circle-check"}"></i><span>${escapeHtml(message)}</span>`;
-  region.append(toast);
-  setIcons();
-  window.setTimeout(() => toast.remove(), 3600);
-}
-
-function setPage(page) {
-  if (!pageTitles[page]) return;
-  currentPage = page;
-  tableSearch = "";
-  document.querySelectorAll(".nav-item").forEach((button) => {
-    button.classList.toggle("active", button.dataset.page === page);
+  const challenge = await createCodeChallenge(verifier);
+  const parameters = new URLSearchParams({
+    client_id: SPOTIFY_CLIENT_ID,
+    response_type: "code",
+    redirect_uri: REDIRECT_URI,
+    code_challenge_method: "S256",
+    code_challenge: challenge,
+    state,
+    scope: SCOPES.join(" "),
   });
-  document.querySelector("#breadcrumb-page").textContent = pageTitles[page];
-  document.querySelector("#sidebar").classList.remove("open");
-  renderPage();
+
+  window.location.assign(`${AUTH_ENDPOINT}?${parameters.toString()}`);
 }
 
-function pageHeader(kicker, title, subtitle, actions = "") {
-  return `<div class="page-heading"><div><div class="eyebrow">${kicker}</div><h1>${title}</h1><p>${subtitle}</p></div><div class="heading-actions">${actions}</div></div>`;
-}
-function button(label, icon, attrs = "", primary = false) {
-  return `<button class="button${primary ? " button-primary" : ""}" ${attrs}><i data-lucide="${icon}"></i>${label}</button>`;
-}
-function kpi(label, value, icon, foot, tone = "#ff858a", glow = "rgba(229,57,69,.12)") {
-  return `<article class="glass-card kpi-card" style="--tone:${tone};--glow:${glow}"><div class="kpi-top"><span class="kpi-label">${label}</span><span class="kpi-icon"><i data-lucide="${icon}"></i></span></div><div class="kpi-value">${value}</div><div class="kpi-foot">${foot}</div></article>`;
-}
-function getAlerts() {
-  const licenseAlerts = data.drivers.filter((driver) => daysUntil(driver.licenseExpiry) <= 30).length;
-  const dueMaintenance = data.vehicles.filter((item) => {
-    const last = data.maintenance.filter((entry) => entry.vehicleId === item.id).sort((a, b) => b.date.localeCompare(a.date))[0];
-    return last && item.km >= Number(last.nextKm);
-  }).length;
-  return licenseAlerts + dueMaintenance;
-}
+async function exchangeAuthorizationCode() {
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get("code");
+  const returnedState = url.searchParams.get("state");
+  const authError = url.searchParams.get("error");
 
-function renderDashboard() {
-  const total = data.vehicles.length;
-  const onRoute = data.vehicles.filter((item) => item.status === "Em rota").length;
-  const inMaintenance = data.vehicles.filter((item) => item.status === "Manutenção").length;
-  const monthlyFuel = data.fuel.filter((item) => item.date.slice(0, 7) === new Date().toISOString().slice(0, 7));
-  const liters = monthlyFuel.reduce((sum, item) => sum + Number(item.liters), 0);
-  const avgConsumption = monthlyFuel.length ? monthlyFuel.reduce((sum, item) => sum + Number(item.average), 0) / monthlyFuel.length : 0;
-  const alerts = getAlerts();
-  const recent = [...data.activities].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
-  return `${pageHeader("PAINEL EXECUTIVO", `<span id="dashboard-greeting">${getTimeGreeting()}, ${escapeHtml(currentUser.split(/\s+/)[0] || "usuário")}</span> <span aria-hidden='true'>✦</span>`, "Aqui está o resumo da operação da sua frota hoje.", button("Baixar relatório", "download", "data-action='export-summary'"))}
-    <section class="kpi-grid">
-      ${kpi("Veículos na frota", number(total), "truck", `<span class="trend">● ${data.vehicles.filter((v) => v.status === "Disponível").length} disponíveis</span> no momento`)}
-      ${kpi("Veículos em rota", number(onRoute), "route", `${total ? Math.round(onRoute / total * 100) : 0}% da frota em operação`, "#ff777e", "rgba(229,57,69,.15)")}
-      ${kpi("Em manutenção", number(inMaintenance), "wrench", `${data.maintenance.filter((m) => m.status === "Em andamento").length} ordem(ns) em aberto`, "#f3b95c", "rgba(243,185,92,.13)")}
-      ${kpi("Consumo médio", `${avgConsumption.toFixed(1).replace(".", ",")} <small style="font-size:12px;color:#91a1b7">km/L</small>`, "fuel", `${number(Math.round(liters))} litros registrados no mês`, "#ff858a", "rgba(229,57,69,.12)")}
-      ${kpi("Alertas pendentes", number(alerts), "bell-ring", "CNHs e revisões que precisam de atenção", alerts ? "#ff9aa7" : "#39d6a1", alerts ? "rgba(255,113,130,.14)" : "rgba(57,214,161,.12)")}
-    </section>
-    <section class="dashboard-grid">
-      <article class="glass-card chart-card"><div class="card-heading"><div><h2>Custos operacionais</h2><p>Despesas consolidadas · últimos 6 meses</p></div><div class="chart-legend"><span><i class="legend-dot"></i>Combustível</span><span><i class="legend-dot cyan"></i>Manutenção</span></div></div><canvas class="chart-canvas" id="cost-chart" aria-label="Gráfico de custos operacionais"></canvas></article>
-      <article class="glass-card chart-card"><div class="card-heading"><div><h2>Status da frota</h2><p>Distribuição atual dos veículos</p></div><span class="status-badge available">Ao vivo</span></div><div class="donut-wrap"><div class="donut" id="fleet-donut"><div class="donut-center"><strong>${total}</strong><span>veículos</span></div></div><div class="status-legend" id="status-legend"></div></div></article>
-    </section>
-    <section class="glass-card activity-card"><div class="card-heading"><div><h2>Atividades recentes</h2><p>Acompanhe os últimos eventos registrados na operação.</p></div>${button("Ver veículos", "arrow-right", "data-page-link='vehicles'")}</div><div class="activity-list">${recent.length ? recent.map(activityMarkup).join("") : `<div class="table-empty">Nenhuma atividade registrada.</div>`}</div></section>`;
-}
+  if (!code && !authError) return;
+  window.history.replaceState({}, document.title, REDIRECT_URI);
 
-function activityMarkup(item) {
-  const icon = item.type === "success" ? "fuel" : item.type === "warning" ? "triangle-alert" : "truck";
-  return `<div class="activity-item"><span class="activity-icon ${item.type}"><i data-lucide="${icon}"></i></span><div class="activity-main"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></div><time class="activity-time">${item.time === "Ontem" ? "Ontem" : `${formatDate(item.date)} · ${escapeHtml(item.time)}`}</time></div>`;
-}
+  if (authError) {
+    sessionStorage.removeItem(VERIFIER_STORAGE_KEY);
+    sessionStorage.removeItem(STATE_STORAGE_KEY);
+    throw new Error(`A autenticação foi cancelada ou recusada (${authError}).`);
+  }
 
-const tableConfigs = {
-  vehicles: {
-    title: "Frota de veículos", description: "Gerencie os veículos, atribuições e disponibilidade da operação.",
-    add: "Adicionar veículo", entity: "vehicle", filters: [["all", "Todos os status"], ["Em rota", "Em rota"], ["Disponível", "Disponível"], ["Manutenção", "Manutenção"]],
-    headers: ["Veículo", "Placa", "Ano", "Quilometragem", "Motorista", "Status", "Ações"],
-    rows: () => data.vehicles.map((item) => ({
-      search: `${item.model} ${item.plate} ${driverName(item.driverId)} ${item.type}`,
-      filter: item.status,
-      cells: [`<div class="vehicle-cell"><span class="vehicle-glyph"><i data-lucide="${item.type === "Caminhão" ? "truck" : "van"}"></i></span><span class="primary-cell">${escapeHtml(item.model)}<span class="secondary-cell">${escapeHtml(item.type)}</span></span></div>`,
-        `<span class="plate">${escapeHtml(item.plate)}</span>`, number(item.year), `${number(item.km)} km`, escapeHtml(driverName(item.driverId)), statusBadge(item.status),
-        rowActions("vehicle", item.id, true)],
-    })),
-  },
-  drivers: {
-    title: "Equipe de motoristas", description: "Acompanhe cadastros, habilitações e validade das CNHs.",
-    add: "Adicionar motorista", entity: "driver", filters: [["all", "Todos os motoristas"], ["Ativo", "Ativos"], ["Inativo", "Inativos"]],
-    headers: ["Motorista", "Categoria CNH", "Vencimento CNH", "Telefone", "Situação", "Ações"],
-    rows: () => data.drivers.map((item) => {
-      const remaining = daysUntil(item.licenseExpiry);
-      const licenseStatus = remaining < 0 ? "Vencida" : remaining <= 30 ? "Vence em breve" : item.status;
-      return {
-        search: `${item.name} ${item.phone} ${item.category}`,
-        filter: item.status,
-        cells: [`<span class="primary-cell">${escapeHtml(item.name)}<span class="secondary-cell">${data.vehicles.filter((v) => v.driverId === item.id).length} veículo(s) atribuído(s)</span></span>`,
-          `Categoria ${escapeHtml(item.category)}`, `<span class="status-badge ${remaining < 0 ? "expired" : remaining <= 30 ? "soon" : "available"}">${formatDate(item.licenseExpiry)}</span>`, escapeHtml(item.phone),
-          `<span class="status-badge ${remaining < 0 ? "expired" : remaining <= 30 ? "soon" : "available"}">${licenseStatus}${remaining < 0 ? "" : remaining <= 30 ? ` · ${remaining} dias` : ""}</span>`, rowActions("driver", item.id)],
-      };
+  const expectedState = sessionStorage.getItem(STATE_STORAGE_KEY);
+  const verifier = sessionStorage.getItem(VERIFIER_STORAGE_KEY);
+  sessionStorage.removeItem(STATE_STORAGE_KEY);
+  sessionStorage.removeItem(VERIFIER_STORAGE_KEY);
+
+  if (!returnedState || returnedState !== expectedState) {
+    throw new Error("Não foi possível validar a autenticação. Tente conectar novamente.");
+  }
+  if (!verifier) {
+    throw new Error("A chave de autenticação expirou. Tente conectar novamente.");
+  }
+
+  const response = await fetch(TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: SPOTIFY_CLIENT_ID,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: REDIRECT_URI,
+      code_verifier: verifier,
     }),
-  },
-  maintenance: {
-    title: "Ordens de manutenção", description: "Planeje revisões e acompanhe custos e serviços da frota.",
-    add: "Registrar manutenção", entity: "maintenance", filters: [["all", "Todos os serviços"], ["Em andamento", "Em andamento"], ["Concluída", "Concluídas"]],
-    headers: ["Veículo", "Serviço", "Tipo", "Data", "Custo", "Próxima revisão", "Status", "Ações"],
-    rows: () => data.maintenance.map((item) => ({
-      search: `${vehicleName(item.vehicleId)} ${item.description} ${item.parts} ${item.kind}`,
-      filter: item.status,
-      cells: [`<span class="primary-cell">${escapeHtml(vehicleName(item.vehicleId))}</span>`,
-        `<span class="primary-cell">${escapeHtml(item.description)}<span class="secondary-cell">${escapeHtml(item.parts)}</span></span>`,
-        escapeHtml(item.kind), formatDate(item.date), money(item.cost), `${number(item.nextKm)} km`, statusBadge(item.status), rowActions("maintenance", item.id)],
-    })),
-  },
-  fuel: {
-    title: "Controle de abastecimento", description: "Registre abastecimentos e monitore consumo e custo por veículo.",
-    add: "Registrar abastecimento", entity: "fuel", filters: [["all", "Todos os veículos"], ...data.vehicles.map((v) => [v.id, v.plate])],
-    headers: ["Veículo", "Data", "Posto", "Quilometragem", "Litros", "Média km/L", "Valor total", "Ações"],
-    rows: () => data.fuel.map((item) => ({
-      search: `${vehicleName(item.vehicleId)} ${item.station}`,
-      filter: item.vehicleId,
-      cells: [`<span class="primary-cell">${escapeHtml(vehicleName(item.vehicleId))}</span>`, formatDate(item.date), escapeHtml(item.station), `${number(item.km)} km`, `${Number(item.liters).toLocaleString("pt-BR")} L`, `${Number(item.average).toLocaleString("pt-BR")} km/L`, money(item.total), rowActions("fuel", item.id)],
-    })),
-  },
-};
-
-function statusBadge(status) {
-  const cls = status === "Disponível" || status === "Concluída" || status === "Ativo" ? "available" : status === "Em rota" ? "route" : status === "Vencida" ? "expired" : status === "Vence em breve" ? "soon" : "maintenance";
-  return `<span class="status-badge ${cls}">${escapeHtml(status)}</span>`;
-}
-function rowActions(entity, id, history = false) {
-  return `<div class="row-actions">${history ? `<button class="action-button" title="Ver histórico" aria-label="Ver histórico" data-action="history" data-id="${escapeHtml(id)}"><i data-lucide="history"></i></button>` : ""}<button class="action-button" title="Editar" aria-label="Editar" data-action="edit" data-entity="${entity}" data-id="${escapeHtml(id)}"><i data-lucide="pencil"></i></button><button class="action-button danger" title="Excluir" aria-label="Excluir" data-action="delete" data-entity="${entity}" data-id="${escapeHtml(id)}"><i data-lucide="trash-2"></i></button></div>`;
-}
-
-function renderTablePage(page) {
-  const config = tableConfigs[page];
-  const rows = config.rows().filter((row) => {
-    const matchesSearch = row.search.toLocaleLowerCase("pt-BR").includes(tableSearch.toLocaleLowerCase("pt-BR"));
-    const selectedFilter = activeFilters[page] || "all";
-    return matchesSearch && (selectedFilter === "all" || row.filter === selectedFilter);
   });
-  const filters = config.filters.map(([value, label]) => `<option value="${escapeHtml(value)}" ${(activeFilters[page] || "all") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
-  const alert = page === "drivers" && data.drivers.some((driver) => daysUntil(driver.licenseExpiry) <= 30)
-    ? `<div class="alert-banner"><i data-lucide="triangle-alert"></i><span><strong>Atenção:</strong> ${data.drivers.filter((driver) => daysUntil(driver.licenseExpiry) <= 30).length} CNH(s) vencida(s) ou próximas do vencimento. Verifique a documentação dos motoristas.</span></div>` : "";
-  const due = page === "maintenance" ? data.vehicles.filter((item) => {
-    const last = data.maintenance.filter((entry) => entry.vehicleId === item.id).sort((a, b) => b.date.localeCompare(a.date))[0];
-    return last && item.km >= Number(last.nextKm);
-  }).length : 0;
-  const maintenanceAlert = due ? `<div class="alert-banner"><i data-lucide="triangle-alert"></i><span><strong>Revisão por quilometragem:</strong> ${due} veículo(s) atingiram ou ultrapassaram a marca da próxima revisão.</span></div>` : "";
-  const body = rows.length ? rows.map((row) => `<tr>${row.cells.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("") : `<tr><td class="table-empty" colspan="${config.headers.length}">Nenhum registro encontrado. Ajuste os filtros ou cadastre um novo item.</td></tr>`;
-  const headActions = button(config.add, "plus", `data-action="add" data-entity="${config.entity}"`, true);
-  return `${pageHeader("OPERAÇÃO", config.title, config.description, headActions)}${alert}${maintenanceAlert}
-    <section class="glass-card section-card">
-      <div class="table-toolbar"><div class="toolbar-group"><label class="search-field"><i data-lucide="search"></i><input id="table-search" type="search" placeholder="Buscar registros..." value="${escapeHtml(tableSearch)}" aria-label="Buscar registros" /></label><select class="filter-select" id="table-filter" aria-label="Filtrar registros">${filters}</select></div><div class="toolbar-group"><span class="status-badge available">${rows.length} registro(s)</span></div></div>
-      <div class="table-scroll"><table class="data-table"><thead><tr>${config.headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>
-      <div class="table-summary"><span>Exibindo ${rows.length} de ${config.rows().length} registros</span><span>Dados atualizados em tempo real</span></div>
-    </section>`;
-}
+  const data = await response.json();
 
-function renderReports() {
-  const now = new Date();
-  const monthKey = now.toISOString().slice(0, 7);
-  const monthlyFuel = data.fuel.filter((item) => item.date.startsWith(monthKey)).reduce((sum, item) => sum + Number(item.total), 0);
-  const monthlyMaintenance = data.maintenance.filter((item) => item.date.startsWith(monthKey)).reduce((sum, item) => sum + Number(item.cost), 0);
-  const rows = data.vehicles.map((item) => {
-    const fuelCost = data.fuel.filter((entry) => entry.vehicleId === item.id).reduce((sum, entry) => sum + Number(entry.total), 0);
-    const maintenanceCost = data.maintenance.filter((entry) => entry.vehicleId === item.id).reduce((sum, entry) => sum + Number(entry.cost), 0);
-    return `<tr><td><span class="primary-cell">${escapeHtml(item.model)}<span class="secondary-cell">${escapeHtml(item.plate)}</span></span></td><td>${number(item.km)} km</td><td>${money(fuelCost)}</td><td>${money(maintenanceCost)}</td><td class="primary-cell">${money(fuelCost + maintenanceCost)}</td><td>${statusBadge(item.status)}</td></tr>`;
-  }).join("");
-  const actions = `${button("Exportar CSV", "file-spreadsheet", "data-action='export-csv'")}${button("Exportar PDF", "file-down", "data-action='print'")}`;
-  return `${pageHeader("INTELIGÊNCIA DE DADOS", "Relatórios gerenciais", "Visibilidade financeira e operacional para decisões mais inteligentes.", actions)}
-    <section class="glass-card report-hero"><div><h2>Resumo executivo da operação</h2><p>Consolidado por veículo · valores acumulados dos registros disponíveis.</p></div><div class="report-period"><i data-lucide="calendar-days"></i> ${new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(now)}</div></section>
-    <section class="metric-strip">
-      <article class="glass-card metric-mini"><span>Abastecimento no mês</span><strong>${money(monthlyFuel)}</strong></article>
-      <article class="glass-card metric-mini"><span>Manutenção no mês</span><strong>${money(monthlyMaintenance)}</strong></article>
-      <article class="glass-card metric-mini"><span>Custo total registrado</span><strong>${money(monthlyFuel + monthlyMaintenance)}</strong></article>
-    </section>
-    <section class="glass-card section-card"><div class="card-heading" style="padding:16px 16px 0;margin-bottom:8px"><div><h2>Custos e quilometragem por veículo</h2><p>Dados calculados a partir dos lançamentos registrados no sistema.</p></div></div><div class="table-scroll"><table class="data-table"><thead><tr><th>Veículo</th><th>Quilometragem atual</th><th>Combustível</th><th>Manutenção</th><th>Custo total</th><th>Status</th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="table-empty">Cadastre veículos para gerar relatórios.</td></tr>`}</tbody></table></div></section>`;
-}
-
-function renderPage() {
-  const content = document.querySelector("#app-content");
-  if (currentPage === "dashboard") content.innerHTML = renderDashboard();
-  else if (tableConfigs[currentPage]) content.innerHTML = renderTablePage(currentPage);
-  else content.innerHTML = renderReports();
-  updateVehicleCount();
-  setIcons();
-  if (currentPage === "dashboard") {
-    drawCostChart();
-    drawStatusChart();
+  if (!response.ok) {
+    throw new Error(data.error_description || "O Spotify não autorizou a conexão.");
   }
-}
-
-function updateVehicleCount() {
-  document.querySelector("#vehicle-count").textContent = String(data.vehicles.length).padStart(2, "0");
-}
-
-function drawCostChart() {
-  const canvas = document.querySelector("#cost-chart");
-  if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const ratio = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(rect.width * ratio));
-  canvas.height = Math.max(1, Math.floor(rect.height * ratio));
-  const ctx = canvas.getContext("2d");
-  ctx.scale(ratio, ratio);
-  const width = rect.width;
-  const height = rect.height;
-  const months = [];
-  for (let offset = 5; offset >= 0; offset--) {
-    const date = new Date();
-    date.setMonth(date.getMonth() - offset, 1);
-    months.push(date.toISOString().slice(0, 7));
-  }
-  const fuel = months.map((month) => data.fuel.filter((entry) => entry.date.startsWith(month)).reduce((sum, entry) => sum + Number(entry.total), 0));
-  const maintenance = months.map((month) => data.maintenance.filter((entry) => entry.date.startsWith(month)).reduce((sum, entry) => sum + Number(entry.cost), 0));
-  const max = Math.max(1000, ...fuel.map((v, i) => v + maintenance[i])) * 1.18;
-  const left = 34, right = 8, top = 10, bottom = 25;
-  const plotW = width - left - right, plotH = height - top - bottom;
-  ctx.font = "9px DM Sans";
-  ctx.textBaseline = "middle";
-  for (let i = 0; i < 4; i++) {
-    const y = top + plotH * i / 3;
-    ctx.strokeStyle = "rgba(156,177,204,.11)";
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - right, y); ctx.stroke();
-    ctx.fillStyle = "#7889a0";
-    ctx.textAlign = "left";
-    ctx.fillText(i === 0 ? "R$ 0" : `${Math.round(max * (3 - i) / 3 / 1000)}k`, 1, y);
-  }
-  const groupW = plotW / months.length;
-  months.forEach((month, index) => {
-    const x = left + groupW * index + groupW * .22;
-    const barW = Math.min(13, groupW * .25);
-    const fuelH = fuel[index] / max * plotH;
-    const maintH = maintenance[index] / max * plotH;
-    ctx.fillStyle = "#e8424b";
-    roundRect(ctx, x, top + plotH - fuelH, barW, fuelH, 3);
-    ctx.fill();
-    ctx.fillStyle = "#ff858a";
-    roundRect(ctx, x + barW + 3, top + plotH - maintH, barW, maintH, 3);
-    ctx.fill();
-    ctx.fillStyle = "#8292a8";
-    ctx.textAlign = "center";
-    const label = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(new Date(`${month}-01T12:00:00`)).replace(".", "");
-    ctx.fillText(label, left + groupW * (index + .5), height - 8);
+  saveToken({
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresAt: Date.now() + data.expires_in * 1000,
   });
 }
-function roundRect(ctx, x, y, width, height, radius) {
-  const adjustedHeight = Math.max(2, height);
-  ctx.beginPath();
-  ctx.roundRect(x, y + height - adjustedHeight, width, adjustedHeight, Math.min(radius, adjustedHeight / 2));
-}
-function drawStatusChart() {
-  const stats = [
-    ["Em rota", data.vehicles.filter((item) => item.status === "Em rota").length, ""],
-    ["Disponível", data.vehicles.filter((item) => item.status === "Disponível").length, "green"],
-    ["Manutenção", data.vehicles.filter((item) => item.status === "Manutenção").length, "amber"],
-  ];
-  const total = data.vehicles.length;
-  let cumulative = 0;
-  const colors = ["#e8424b", "#39d6a1", "#f3b95c"];
-  const stops = stats.map(([, count], index) => {
-    const start = total ? cumulative / total * 100 : 0;
-    cumulative += count;
-    const end = total ? cumulative / total * 100 : 100;
-    return `${colors[index]} ${start}% ${end}%`;
+
+async function refreshAccessToken(token) {
+  if (!token.refreshToken) {
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    updateAccountUi();
+    throw new Error("Sua sessão do Spotify expirou. Conecte sua conta novamente.");
+  }
+
+  const response = await fetch(TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: SPOTIFY_CLIENT_ID,
+      grant_type: "refresh_token",
+      refresh_token: token.refreshToken,
+    }),
   });
-  const donut = document.querySelector("#fleet-donut");
-  if (donut) donut.style.background = `conic-gradient(${stops.join(",")})`;
-  const legend = document.querySelector("#status-legend");
-  if (legend) legend.innerHTML = stats.map(([label, count, cls]) => `<div><i class="${cls}"></i><span>${label}</span><b>${count}</b></div>`).join("");
+  const data = await response.json();
+
+  if (!response.ok) {
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    updateAccountUi();
+    throw new Error(data.error_description || "Não foi possível renovar a sessão do Spotify.");
+  }
+
+  const refreshedToken = {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token || token.refreshToken,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  };
+  saveToken(refreshedToken);
+  return refreshedToken.accessToken;
 }
 
-const formDefinitions = {
-  vehicle: {
-    title: "Veículo", collection: "vehicles",
-    fields: [
-      ["plate", "Placa", "text", true, "ABC-1D23"], ["model", "Modelo", "text", true, "Ex.: Ford Transit"],
-      ["type", "Tipo de veículo", "select", true, ["Van", "Caminhão", "Pickup", "Carro", "Ônibus"]],
-      ["year", "Ano", "number", true, { min: 1980, max: 2100 }],
-      ["km", "Quilometragem atual", "number", true, { min: 0 }],
-      ["driverId", "Motorista responsável", "select", false, "drivers"],
-      ["status", "Status operacional", "select", true, ["Disponível", "Em rota", "Manutenção"]],
-    ],
-  },
-  driver: {
-    title: "Motorista", collection: "drivers",
-    fields: [
-      ["name", "Nome completo", "text", true, "Nome do motorista"],
-      ["category", "Categoria CNH", "select", true, ["A", "B", "C", "D", "E", "AB", "AC", "AD", "AE"]],
-      ["licenseExpiry", "Vencimento da CNH", "date", true],
-      ["phone", "Telefone", "tel", true, "(11) 99999-9999"],
-      ["status", "Situação", "select", true, ["Ativo", "Inativo"]],
-    ],
-  },
-  maintenance: {
-    title: "Manutenção", collection: "maintenance",
-    fields: [
-      ["vehicleId", "Veículo", "select", true, "vehicles"],
-      ["kind", "Tipo de manutenção", "select", true, ["Preventiva", "Corretiva"]],
-      ["description", "Serviço realizado", "text", true, "Ex.: Revisão programada"],
-      ["parts", "Peças / observações", "text", false, "Peças trocadas ou detalhes"],
-      ["date", "Data da revisão", "date", true],
-      ["kmAtService", "Quilometragem no serviço", "number", true, { min: 0 }],
-      ["nextKm", "Próxima revisão por km", "number", true, { min: 0 }],
-      ["cost", "Custo total (R$)", "number", true, { min: 0, step: "0.01" }],
-      ["status", "Status", "select", true, ["Em andamento", "Concluída"]],
-    ],
-  },
-  fuel: {
-    title: "Abastecimento", collection: "fuel",
-    fields: [
-      ["vehicleId", "Veículo", "select", true, "vehicles"],
-      ["date", "Data", "date", true],
-      ["station", "Posto de combustível", "text", true, "Nome do posto"],
-      ["km", "Quilometragem no momento", "number", true, { min: 0 }],
-      ["liters", "Litros abastecidos", "number", true, { min: 0, step: "0.01" }],
-      ["total", "Valor total (R$)", "number", true, { min: 0, step: "0.01" }],
-      ["average", "Média de consumo (km/L)", "number", false, { min: 0, step: "0.1" }],
-    ],
-  },
-};
-
-function optionMarkup(options, selected, firstLabel) {
-  if (options === "drivers") {
-    return `<option value="">Não atribuído</option>${data.drivers.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === selected ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}`;
-  }
-  if (options === "vehicles") {
-    return data.vehicles.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === selected ? "selected" : ""}>${escapeHtml(item.model)} · ${escapeHtml(item.plate)}</option>`).join("");
-  }
-  return options.map((option) => `<option value="${escapeHtml(option)}" ${option === selected ? "selected" : ""}>${escapeHtml(option)}</option>`).join("");
+async function getAccessToken() {
+  const token = getStoredToken();
+  if (!token) throw new Error("Conecte sua conta do Spotify antes de gerar uma playlist.");
+  if (token.expiresAt <= Date.now() + 60_000) return refreshAccessToken(token);
+  return token.accessToken;
 }
 
-function openForm(entity, id = "") {
-  const definition = formDefinitions[entity];
-  if (!definition) return;
-  const existing = data[definition.collection].find((item) => item.id === id) || {};
-  const fields = definition.fields.map(([name, label, type, required, extra]) => {
-    const value = existing[name] ?? (name === "date" ? new Date().toISOString().slice(0, 10) : name === "status" ? (entity === "vehicle" ? "Disponível" : entity === "driver" ? "Ativo" : entity === "maintenance" ? "Em andamento" : "") : "");
-    let input;
-    if (type === "select") input = `<select class="form-control" name="${name}" ${required ? "required" : ""}>${optionMarkup(extra, value, label)}</select>`;
-    else {
-      const attrs = typeof extra === "object" && extra ? Object.entries(extra).map(([key, val]) => `${key}="${escapeHtml(val)}"`).join(" ") : extra ? `placeholder="${escapeHtml(extra)}"` : "";
-      input = `<input class="form-control" name="${name}" type="${type}" value="${escapeHtml(value)}" ${required ? "required" : ""} ${name === "average" ? 'readonly placeholder="Calculada automaticamente"' : ""} ${attrs} />`;
+async function spotifyRequest(path, options = {}, canRetry = true) {
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...options.headers,
+    },
+  });
+
+  if (response.status === 401 && canRetry) {
+    const token = getStoredToken();
+    if (!token) throw new Error("Sua sessão do Spotify expirou. Conecte sua conta novamente.");
+    token.expiresAt = 0;
+    saveToken(token);
+    return spotifyRequest(path, options, false);
+  }
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const error = await response.json();
+      detail = error.error?.message || error.error_description || "";
+    } catch {
+      detail = "";
     }
-    return `<div class="form-field"><label for="field-${name}">${label}${required ? " *" : ""}</label>${input.replace(`name="${name}"`, `id="field-${name}" name="${name}"`)}</div>`;
-  }).join("");
-  const root = document.querySelector("#modal-root");
-  root.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><div><h2 id="modal-title">${id ? "Editar" : "Adicionar"} ${definition.title.toLocaleLowerCase("pt-BR")}</h2><p>Preencha os dados para atualizar a operação.</p></div><button type="button" class="modal-close" data-action="close-modal" aria-label="Fechar"><i data-lucide="x"></i></button></header><form class="modal-form" id="record-form" data-entity="${entity}" data-id="${escapeHtml(id)}"><div class="form-grid">${fields}</div><div class="modal-actions"><button type="button" class="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit"><i data-lucide="check"></i>Salvar registro</button></div></form></div>`;
-  setIcons();
-  if (entity === "fuel" && !id) {
-    const selectedVehicle = vehicle(root.querySelector('[name="vehicleId"]')?.value);
-    if (selectedVehicle) root.querySelector("#field-km").value = selectedVehicle.km;
+    if (response.status === 403) {
+      throw new Error(
+        `O Spotify negou acesso à API. Contas Free podem criar playlists, mas no modo de desenvolvimento o proprietário do app precisa ter Premium e esta conta deve estar na lista permitida em Settings > Users Management.${detail ? ` Detalhe: ${detail}` : ""}`,
+      );
+    }
+    throw new Error(detail || `O Spotify retornou um erro (${response.status}).`);
   }
-  if (entity === "maintenance" && !id) {
-    const selectedVehicle = vehicle(root.querySelector('[name="vehicleId"]')?.value);
-    if (selectedVehicle) root.querySelector("#field-kmAtService").value = selectedVehicle.km;
-  }
-  root.querySelector(".form-control")?.focus();
+
+  if (response.status === 204) return null;
+  return response.json();
 }
 
-function openHistory(id) {
-  const item = vehicle(id);
-  if (!item) return;
-  const maintenance = data.maintenance.filter((entry) => entry.vehicleId === id).map((entry) => ({ date: entry.date, title: `Manutenção · ${entry.description}`, text: `${entry.kind} · ${entry.parts} · ${money(entry.cost)} · próxima revisão ${number(entry.nextKm)} km` }));
-  const fuel = data.fuel.filter((entry) => entry.vehicleId === id).map((entry) => ({ date: entry.date, title: "Abastecimento", text: `${entry.station} · ${entry.liters} L · ${money(entry.total)} · ${entry.average} km/L` }));
-  const events = [...maintenance, ...fuel].sort((a, b) => b.date.localeCompare(a.date));
-  document.querySelector("#modal-root").innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><div><h2 id="modal-title">Histórico do veículo</h2><p>${escapeHtml(item.model)} · ${escapeHtml(item.plate)}</p></div><button class="modal-close" data-action="close-modal" aria-label="Fechar"><i data-lucide="x"></i></button></header><div class="history-list">${events.length ? events.map((event) => `<article class="history-entry"><strong>${formatDate(event.date)} · ${escapeHtml(event.title)}</strong><p>${escapeHtml(event.text)}</p></article>`).join("") : `<div class="table-empty">Nenhum abastecimento ou serviço registrado para este veículo.</div>`}</div></div>`;
-  setIcons();
+function normalizeText(value) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
-function recordActivity(type, title, detail) {
-  data.activities.unshift({ id: `a${Date.now()}`, type, title, detail, date: new Date().toISOString().slice(0, 10), time: new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date()) });
-  data.activities = data.activities.slice(0, 20);
+function getTitleTokens(movieTitle) {
+  const tokens = normalizeText(movieTitle).split(/\s+/).filter((word) => word && !IGNORED_TITLE_WORDS.has(word));
+  return tokens.length ? tokens : normalizeText(movieTitle).split(/\s+/).filter(Boolean);
 }
 
-function formValue(form, name) {
-  return form.elements.namedItem(name)?.value?.trim() ?? "";
-}
-function handleFormSubmit(form) {
-  const entity = form.dataset.entity;
-  const definition = formDefinitions[entity];
-  if (!definition) return;
-  const record = {};
-  for (const [name, , type] of definition.fields) {
-    const raw = formValue(form, name);
-    record[name] = type === "number" ? Number(raw) : raw;
-  }
-  if (entity === "vehicle") record.plate = record.plate.toUpperCase();
-  if (entity === "maintenance") {
-    const currentVehicle = vehicle(record.vehicleId);
-    if (currentVehicle) currentVehicle.status = record.status === "Em andamento" ? "Manutenção" : currentVehicle.status === "Manutenção" ? "Disponível" : currentVehicle.status;
-  }
-  if (entity === "fuel") {
-    const prior = data.fuel.filter((entry) => entry.vehicleId === record.vehicleId && entry.km < record.km).sort((a, b) => b.km - a.km)[0];
-    const currentVehicle = vehicle(record.vehicleId);
-    record.average = prior && record.liters > 0 ? Number(((record.km - prior.km) / record.liters).toFixed(1)) : 0;
-    if (currentVehicle) currentVehicle.km = Math.max(currentVehicle.km, record.km);
-  }
-  const id = form.dataset.id;
-  if (id) {
-    const index = data[definition.collection].findIndex((item) => item.id === id);
-    if (index >= 0) data[definition.collection][index] = { ...data[definition.collection][index], ...record };
-    showToast(`${definition.title} atualizado com sucesso.`);
-  } else {
-    data[definition.collection].unshift({ id: `${entity[0]}${Date.now()}`, ...record });
-    showToast(`${definition.title} cadastrado com sucesso.`);
-  }
-  if (entity === "vehicle" && record.driverId) {
-    recordActivity("route", "Veículo atualizado", `${record.plate} · ${record.model}`);
-  } else if (entity === "fuel") {
-    recordActivity("success", "Abastecimento registrado", `${vehicle(record.vehicleId)?.plate || ""} · ${record.station} · ${record.liters} litros`);
-  } else if (entity === "maintenance") {
-    recordActivity("warning", "Manutenção registrada", `${vehicle(record.vehicleId)?.plate || ""} · ${record.description}`);
-  }
-  saveData();
-  closeModal();
-  renderPage();
+function relevanceScore(candidateText, movieTitle) {
+  const candidate = normalizeText(candidateText);
+  const title = normalizeText(movieTitle);
+  const tokens = getTitleTokens(movieTitle);
+  const matches = tokens.filter((token) => candidate.split(" ").includes(token)).length;
+  if (!matches) return 0;
+
+  let score = matches * 12;
+  if (candidate.includes(title)) score += 100;
+  return score;
 }
 
-function closeModal() {
-  document.querySelector("#modal-root").innerHTML = "";
+function getSearchQueries(movieTitle) {
+  return [
+    `${movieTitle} songs`,
+    `music from ${movieTitle}`,
+    `${movieTitle} music`,
+    `"${movieTitle}"`,
+  ];
 }
 
-function deleteRecord(entity, id) {
-  const config = formDefinitions[entity];
-  if (!config) return;
-  const record = data[config.collection].find((item) => item.id === id);
-  if (!record) return;
-  const label = entity === "vehicle" ? `${record.model} (${record.plate})` : entity === "driver" ? record.name : entity === "maintenance" ? record.description : `abastecimento de ${record.station}`;
-  if (!window.confirm(`Deseja excluir ${label}? Esta ação não pode ser desfeita.`)) return;
-  data[config.collection] = data[config.collection].filter((item) => item.id !== id);
-  if (entity === "vehicle") {
-    data.maintenance = data.maintenance.filter((item) => item.vehicleId !== id);
-    data.fuel = data.fuel.filter((item) => item.vehicleId !== id);
+async function searchTracks(movieTitle) {
+  const tracksById = new Map();
+
+  for (const query of getSearchQueries(movieTitle)) {
+    const parameters = new URLSearchParams({ q: query, type: "track", limit: "20" });
+    const result = await spotifyRequest(`/search?${parameters.toString()}`);
+    for (const track of result.tracks.items) {
+      const candidateText = `${track.name} ${track.album.name}`;
+      const score = relevanceScore(candidateText, movieTitle);
+      if (track.uri && track.is_playable !== false && score > 0) {
+        tracksById.set(track.id, { track, score });
+      }
+    }
   }
-  if (entity === "driver") {
-    data.vehicles.forEach((item) => { if (item.driverId === id) item.driverId = ""; });
-  }
-  saveData();
-  renderPage();
-  showToast(`${config.title} excluído com sucesso.`);
+
+  return Array.from(tracksById.values())
+    .sort(
+      (first, second) =>
+        second.score - first.score ||
+        (second.track.popularity || 0) - (first.track.popularity || 0),
+    )
+    .slice(0, MAX_PLAYLIST_TRACKS)
+    .map(({ track }) => track);
 }
 
-function csvCell(value) {
-  return `"${String(value ?? "").replace(/"/g, '""')}"`;
-}
-function downloadCsv(filename, rows) {
-  const content = `\uFEFF${rows.map((row) => row.map(csvCell).join(";")).join("\r\n")}`;
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-  showToast("Arquivo CSV exportado.");
-}
-function exportReport() {
-  const rows = [["Veículo", "Placa", "Quilometragem", "Status", "Combustível (R$)", "Manutenção (R$)", "Custo total (R$)"]];
-  for (const item of data.vehicles) {
-    const fuel = data.fuel.filter((entry) => entry.vehicleId === item.id).reduce((sum, entry) => sum + Number(entry.total), 0);
-    const maintenance = data.maintenance.filter((entry) => entry.vehicleId === item.id).reduce((sum, entry) => sum + Number(entry.cost), 0);
-    rows.push([item.model, item.plate, item.km, item.status, fuel.toFixed(2), maintenance.toFixed(2), (fuel + maintenance).toFixed(2)]);
-  }
-  downloadCsv("fleetwise-relatorio-veiculos.csv", rows);
-}
-function exportSummary() {
-  downloadCsv("fleetwise-resumo-frota.csv", [
-    ["Indicador", "Valor"],
-    ["Veículos na frota", data.vehicles.length],
-    ["Veículos em rota", data.vehicles.filter((item) => item.status === "Em rota").length],
-    ["Veículos disponíveis", data.vehicles.filter((item) => item.status === "Disponível").length],
-    ["Veículos em manutenção", data.vehicles.filter((item) => item.status === "Manutenção").length],
-    ["Alertas pendentes", getAlerts()],
-  ]);
+async function findFeaturedSongs(movieTitle) {
+  const tracks = await searchTracks(movieTitle);
+  if (tracks.length) return tracks;
+
+  throw new Error(`Não encontrei músicas relacionadas a "${movieTitle}" no Spotify. Tente outro título ou confira a grafia.`);
 }
 
-document.addEventListener("click", (event) => {
-  const nav = event.target.closest("[data-page]");
-  if (nav) { event.preventDefault(); setPage(nav.dataset.page); return; }
-  const linkedPage = event.target.closest("[data-page-link]");
-  if (linkedPage) { setPage(linkedPage.dataset.pageLink); return; }
-  const action = event.target.closest("[data-action]");
-  if (!action) {
-    if (event.target === document.querySelector("#modal-root")) closeModal();
-    return;
+function renderTracks(tracks) {
+  elements.trackList.replaceChildren();
+
+  for (const [index, track] of tracks.entries()) {
+    const row = document.createElement("article");
+    row.className = "track-row";
+
+    const number = document.createElement("span");
+    number.className = "track-number";
+    number.textContent = String(index + 1).padStart(2, "0");
+
+    const image = document.createElement("img");
+    image.className = "track-art";
+    image.alt = "";
+    image.loading = "lazy";
+    image.src = track.album.images?.[track.album.images.length - 1]?.url || "";
+
+    const meta = document.createElement("div");
+    meta.className = "track-meta";
+    const title = document.createElement("span");
+    title.className = "track-title";
+    title.textContent = track.name;
+    const artists = document.createElement("span");
+    artists.className = "track-artist";
+    artists.textContent = track.artists.map((artist) => artist.name).join(", ");
+    meta.append(title, artists);
+
+    const albumName = document.createElement("span");
+    albumName.className = "track-album";
+    albumName.textContent = track.album.name;
+
+    row.append(number, image, meta, albumName);
+    elements.trackList.append(row);
   }
-  switch (action.dataset.action) {
-    case "add": openForm(action.dataset.entity); break;
-    case "edit": openForm(action.dataset.entity, action.dataset.id); break;
-    case "delete": deleteRecord(action.dataset.entity, action.dataset.id); break;
-    case "history": openHistory(action.dataset.id); break;
-    case "close-modal": closeModal(); break;
-    case "export-csv": exportReport(); break;
-    case "export-summary": exportSummary(); break;
-    case "print": window.print(); break;
-  }
-});
-document.addEventListener("submit", (event) => {
-  if (event.target.id !== "record-form") return;
-  event.preventDefault();
-  if (!event.target.reportValidity()) return;
-  handleFormSubmit(event.target);
-});
-document.addEventListener("input", (event) => {
-  if (["km", "liters"].includes(event.target.name) && event.target.closest("#record-form")?.dataset.entity === "fuel") {
-    recalculateFuelAverage();
-    return;
-  }
-  if (event.target.id !== "table-search") return;
-  tableSearch = event.target.value;
-  const position = event.target.selectionStart;
-  renderPage();
-  const search = document.querySelector("#table-search");
-  search?.focus();
-  search?.setSelectionRange(position, position);
-});
-document.addEventListener("change", (event) => {
-  if (event.target.id === "table-filter") {
-    activeFilters[currentPage] = event.target.value;
-    renderPage();
-  }
-  if (event.target.name === "vehicleId" && event.target.closest("#record-form")?.dataset.entity === "fuel") {
-    const current = vehicle(event.target.value);
-    const kmInput = document.querySelector("#field-km");
-    if (current && kmInput && !event.target.closest("#record-form").dataset.id) kmInput.value = current.km;
-    recalculateFuelAverage();
-  }
-  if (event.target.name === "vehicleId" && event.target.closest("#record-form")?.dataset.entity === "maintenance") {
-    const current = vehicle(event.target.value);
-    const kmInput = document.querySelector("#field-kmAtService");
-    if (current && kmInput && !event.target.closest("#record-form").dataset.id) kmInput.value = current.km;
-  }
-  if (["km", "liters"].includes(event.target.name) && event.target.closest("#record-form")?.dataset.entity === "fuel") recalculateFuelAverage();
-});
-document.querySelector("#menu-toggle").addEventListener("click", () => document.querySelector("#sidebar").classList.toggle("open"));
-document.querySelector("#login-form").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const name = document.querySelector("#login-name").value.trim().replace(/\s+/g, " ");
-  const error = document.querySelector("#login-error");
-  if (name.length < 2) {
-    error.textContent = "Digite seu nome para acessar o painel.";
-    error.hidden = false;
-    return;
-  }
+}
+
+function renderPlaylist(playlist, tracks, movieTitle) {
+  elements.playlistLink.href = playlist.external_urls.spotify;
+  elements.playlistCaption.textContent = `${tracks.length} faixas · playlist privada · resultados aproximados do Spotify`;
+  elements.results.hidden = false;
+  renderTracks(tracks);
+  elements.results.scrollIntoView({ behavior: "smooth", block: "start" });
+  elements.playlistLink.setAttribute("aria-label", `Abrir a playlist de ${movieTitle} no Spotify`);
+}
+
+async function generatePlaylist(movieTitle) {
+  const tracks = await findFeaturedSongs(movieTitle);
+  setLoading(true, "Criando sua playlist...");
+
+  const playlist = await spotifyRequest("/me/playlists", {
+    method: "POST",
+    body: JSON.stringify({
+      name: `${movieTitle} — Músicas do filme`,
+      description: `Faixas encontradas no Spotify a partir da busca por músicas associadas ao filme ${movieTitle}.`,
+      public: false,
+    }),
+  });
+  renderPlaylist(playlist, tracks, movieTitle);
+
+  const trackUris = tracks.map((track) => track.uri);
   try {
-    localStorage.setItem(USER_STORAGE_KEY, name);
-  } catch (storageError) {
-    console.error("Não foi possível salvar o nome neste navegador.", storageError);
-    error.textContent = "Não foi possível salvar seu nome neste navegador. Verifique as configurações de armazenamento.";
-    error.hidden = false;
-    return;
-  }
-  enterApp(name);
-});
-document.querySelector("#user-profile").addEventListener("click", () => {
-  try {
-    localStorage.removeItem(USER_STORAGE_KEY);
+    for (let index = 0; index < trackUris.length; index += 100) {
+      await spotifyRequest(`/playlists/${encodeURIComponent(playlist.id)}/items`, {
+        method: "POST",
+        body: JSON.stringify({ uris: trackUris.slice(index, index + 100) }),
+      });
+    }
   } catch (error) {
-    console.error("Não foi possível encerrar a identificação neste navegador.", error);
+    throw new Error(`A playlist foi criada, mas não foi possível adicionar todas as faixas. Abra a playlist e tente novamente. ${error.message}`);
   }
-  currentUser = "";
-  document.querySelector("#app-shell").hidden = true;
-  document.querySelector("#login-screen").hidden = false;
-  document.querySelector("#login-name").value = "";
-  document.querySelector("#login-error").hidden = true;
-  document.querySelector("#login-name").focus();
-  setIcons();
-});
-document.querySelector("#notification-button").addEventListener("click", () => {
-  const alerts = getAlerts();
-  showToast(alerts ? `Você tem ${alerts} alerta(s) que precisam de atenção.` : "Nenhum alerta pendente.");
-});
-window.addEventListener("resize", () => { if (currentPage === "dashboard") { drawCostChart(); drawStatusChart(); } });
-document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
+}
 
-document.querySelector("#topbar-date").textContent = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" }).format(new Date());
-document.querySelector("#copyright-year").textContent = new Date().getFullYear();
-document.querySelector("#login-year").textContent = new Date().getFullYear();
-renderPage();
-window.setInterval(() => {
-  const greeting = document.querySelector("#dashboard-greeting");
-  if (greeting) {
-    greeting.textContent = `${getTimeGreeting()}, ${currentUser.split(/\s+/)[0] || "usuário"}`;
+elements.connectButton.addEventListener("click", async () => {
+  hideMessage();
+  try {
+    await connectToSpotify();
+  } catch (error) {
+    showMessage(`Não foi possível iniciar a conexão: ${error.message}`);
   }
-}, 60_000);
-try {
-  const savedUser = localStorage.getItem(USER_STORAGE_KEY)?.trim();
-  if (savedUser) enterApp(savedUser);
-  else document.querySelector("#login-name").focus();
-} catch (error) {
-  console.error("Não foi possível recuperar o nome salvo neste navegador.", error);
-  document.querySelector("#login-error").textContent = "Não foi possível recuperar o nome salvo. Informe seu nome para continuar.";
-  document.querySelector("#login-error").hidden = false;
+});
+
+elements.disconnectButton.addEventListener("click", () => {
+  sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  elements.results.hidden = true;
+  hideMessage();
+  updateAccountUi();
+});
+
+elements.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const movieTitle = elements.movieTitle.value.trim();
+  if (!movieTitle) return;
+
+  hideMessage();
+  elements.results.hidden = true;
+  setLoading(true);
+
+  try {
+    await generatePlaylist(movieTitle);
+  } catch (error) {
+    showMessage(error.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+async function initialize() {
+  try {
+    await exchangeAuthorizationCode();
+  } catch (error) {
+    showMessage(error.message);
+  }
+  updateAccountUi();
 }
 
-function recalculateFuelAverage() {
-  const form = document.querySelector("#record-form");
-  if (form?.dataset.entity !== "fuel") return;
-  const vehicleId = formValue(form, "vehicleId");
-  const km = Number(formValue(form, "km"));
-  const liters = Number(formValue(form, "liters"));
-  const prior = data.fuel.filter((entry) => entry.vehicleId === vehicleId && entry.km < km).sort((a, b) => b.km - a.km)[0];
-  const averageInput = form.elements.namedItem("average");
-  if (averageInput) averageInput.value = prior && liters > 0 ? ((km - prior.km) / liters).toFixed(1) : "";
-}
-
-function enterApp(name) {
-  currentUser = name;
-  document.querySelector("#user-name").textContent = name;
-  document.querySelector("#user-avatar").textContent = name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => Array.from(part)[0]?.toLocaleUpperCase("pt-BR") || "")
-    .join("");
-  document.querySelector("#login-screen").hidden = true;
-  document.querySelector("#app-shell").hidden = false;
-  renderPage();
-}
+initialize();
