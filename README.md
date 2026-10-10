@@ -1,6 +1,12 @@
-# Fleetwise — Gestão de Frotas
+# Ampernet Frotas
 
-SPA responsiva para demonstração e gestão operacional de frotas. O front-end usa HTML, CSS, Tailwind via CDN e JavaScript ES modules; não requer compilação.
+SPA responsiva para demonstração e gestão operacional de frotas da Ampernet. O front-end usa HTML, CSS, Tailwind via CDN e JavaScript ES modules; não requer compilação.
+
+## Identificação do usuário
+
+Na primeira visita, informe somente o nome para abrir o painel. O nome fica salvo no `localStorage` deste navegador e aparece no painel e no perfil. Use o botão de perfil para sair e trocar o nome.
+
+Este fluxo é apenas uma identificação visual local: não usa senha, e-mail ou confirmação, não valida a identidade e não constitui autenticação ou controle de acesso. Qualquer pessoa com acesso ao navegador pode informar um nome. Para dados corporativos compartilhados, implemente autenticação real e políticas RLS no Supabase antes de liberar acesso.
 
 ## Executar localmente
 
@@ -10,7 +16,7 @@ Como a aplicação usa módulos JavaScript, abra a pasta em um servidor HTTP loc
 python -m http.server 8000
 ```
 
-Acesse `http://localhost:8000`. Os dados de demonstração e as alterações feitas na interface ficam no `localStorage` deste navegador.
+Acesse `http://localhost:8000`. O nome da pessoa, os dados de demonstração e as alterações feitas na interface ficam no `localStorage` deste navegador.
 
 ## Módulos disponíveis
 

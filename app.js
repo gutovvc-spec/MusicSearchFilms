@@ -1,4 +1,6 @@
 const STORAGE_KEY = "fleetwise-demo-v1";
+const USER_STORAGE_KEY = "ampernet-fleet-user";
+let currentUser = "";
 const today = new Date();
 const dateOffset = (days) => {
   const value = new Date(today);
@@ -150,7 +152,7 @@ function pageHeader(kicker, title, subtitle, actions = "") {
 function button(label, icon, attrs = "", primary = false) {
   return `<button class="button${primary ? " button-primary" : ""}" ${attrs}><i data-lucide="${icon}"></i>${label}</button>`;
 }
-function kpi(label, value, icon, foot, tone = "#76a9ff", glow = "rgba(77,141,255,.12)") {
+function kpi(label, value, icon, foot, tone = "#ff858a", glow = "rgba(229,57,69,.12)") {
   return `<article class="glass-card kpi-card" style="--tone:${tone};--glow:${glow}"><div class="kpi-top"><span class="kpi-label">${label}</span><span class="kpi-icon"><i data-lucide="${icon}"></i></span></div><div class="kpi-value">${value}</div><div class="kpi-foot">${foot}</div></article>`;
 }
 function getAlerts() {
@@ -171,12 +173,12 @@ function renderDashboard() {
   const avgConsumption = monthlyFuel.length ? monthlyFuel.reduce((sum, item) => sum + Number(item.average), 0) / monthlyFuel.length : 0;
   const alerts = getAlerts();
   const recent = [...data.activities].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
-  return `${pageHeader("PAINEL EXECUTIVO", "Bom dia, Marina <span aria-hidden='true'>✦</span>", "Aqui está o resumo da operação da sua frota hoje.", button("Baixar relatório", "download", "data-action='export-summary'"))}
+  return `${pageHeader("PAINEL EXECUTIVO", `Bom dia, ${escapeHtml(currentUser.split(/\s+/)[0] || "usuário")} <span aria-hidden='true'>✦</span>`, "Aqui está o resumo da operação da sua frota hoje.", button("Baixar relatório", "download", "data-action='export-summary'"))}
     <section class="kpi-grid">
       ${kpi("Veículos na frota", number(total), "truck", `<span class="trend">● ${data.vehicles.filter((v) => v.status === "Disponível").length} disponíveis</span> no momento`)}
-      ${kpi("Veículos em rota", number(onRoute), "route", `${total ? Math.round(onRoute / total * 100) : 0}% da frota em operação`, "#72a7ff", "rgba(77,141,255,.15)")}
+      ${kpi("Veículos em rota", number(onRoute), "route", `${total ? Math.round(onRoute / total * 100) : 0}% da frota em operação`, "#ff777e", "rgba(229,57,69,.15)")}
       ${kpi("Em manutenção", number(inMaintenance), "wrench", `${data.maintenance.filter((m) => m.status === "Em andamento").length} ordem(ns) em aberto`, "#f3b95c", "rgba(243,185,92,.13)")}
-      ${kpi("Consumo médio", avgConsumption ? `${avgConsumption.toFixed(1).replace(".", ",")} <small style="font-size:12px;color:#91a1b7">km/L</small>` : "—", "fuel", `${number(Math.round(liters))} litros registrados no mês`, "#55d6e8", "rgba(85,214,232,.12)")}
+      ${kpi("Consumo médio", avgConsumption ? `${avgConsumption.toFixed(1).replace(".", ",")} <small style="font-size:12px;color:#91a1b7">km/L</small>` : "—", "fuel", `${number(Math.round(liters))} litros registrados no mês`, "#ff858a", "rgba(229,57,69,.12)")}
       ${kpi("Alertas pendentes", number(alerts), "bell-ring", "CNHs e revisões que precisam de atenção", alerts ? "#ff9aa7" : "#39d6a1", alerts ? "rgba(255,113,130,.14)" : "rgba(57,214,161,.12)")}
     </section>
     <section class="dashboard-grid">
@@ -354,10 +356,10 @@ function drawCostChart() {
     const barW = Math.min(13, groupW * .25);
     const fuelH = fuel[index] / max * plotH;
     const maintH = maintenance[index] / max * plotH;
-    ctx.fillStyle = "#4d8dff";
+    ctx.fillStyle = "#e8424b";
     roundRect(ctx, x, top + plotH - fuelH, barW, fuelH, 3);
     ctx.fill();
-    ctx.fillStyle = "#55d6e8";
+    ctx.fillStyle = "#ff858a";
     roundRect(ctx, x + barW + 3, top + plotH - maintH, barW, maintH, 3);
     ctx.fill();
     ctx.fillStyle = "#8292a8";
@@ -379,7 +381,7 @@ function drawStatusChart() {
   ];
   const total = data.vehicles.length;
   let cumulative = 0;
-  const colors = ["#4d8dff", "#39d6a1", "#f3b95c"];
+  const colors = ["#e8424b", "#39d6a1", "#f3b95c"];
   const stops = stats.map(([, count], index) => {
     const start = total ? cumulative / total * 100 : 0;
     cumulative += count;
@@ -656,6 +658,39 @@ document.addEventListener("change", (event) => {
   if (["km", "liters"].includes(event.target.name) && event.target.closest("#record-form")?.dataset.entity === "fuel") recalculateFuelAverage();
 });
 document.querySelector("#menu-toggle").addEventListener("click", () => document.querySelector("#sidebar").classList.toggle("open"));
+document.querySelector("#login-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const name = document.querySelector("#login-name").value.trim().replace(/\s+/g, " ");
+  const error = document.querySelector("#login-error");
+  if (name.length < 2) {
+    error.textContent = "Digite seu nome para acessar o painel.";
+    error.hidden = false;
+    return;
+  }
+  try {
+    localStorage.setItem(USER_STORAGE_KEY, name);
+  } catch (storageError) {
+    console.error("Não foi possível salvar o nome neste navegador.", storageError);
+    error.textContent = "Não foi possível salvar seu nome neste navegador. Verifique as configurações de armazenamento.";
+    error.hidden = false;
+    return;
+  }
+  enterApp(name);
+});
+document.querySelector("#user-profile").addEventListener("click", () => {
+  try {
+    localStorage.removeItem(USER_STORAGE_KEY);
+  } catch (error) {
+    console.error("Não foi possível encerrar a identificação neste navegador.", error);
+  }
+  currentUser = "";
+  document.querySelector("#app-shell").hidden = true;
+  document.querySelector("#login-screen").hidden = false;
+  document.querySelector("#login-name").value = "";
+  document.querySelector("#login-error").hidden = true;
+  document.querySelector("#login-name").focus();
+  setIcons();
+});
 document.querySelector("#notification-button").addEventListener("click", () => {
   const alerts = getAlerts();
   showToast(alerts ? `Você tem ${alerts} alerta(s) que precisam de atenção.` : "Nenhum alerta pendente.");
@@ -665,7 +700,17 @@ document.addEventListener("keydown", (event) => { if (event.key === "Escape") cl
 
 document.querySelector("#topbar-date").textContent = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" }).format(new Date());
 document.querySelector("#copyright-year").textContent = new Date().getFullYear();
+document.querySelector("#login-year").textContent = new Date().getFullYear();
 renderPage();
+try {
+  const savedUser = localStorage.getItem(USER_STORAGE_KEY)?.trim();
+  if (savedUser) enterApp(savedUser);
+  else document.querySelector("#login-name").focus();
+} catch (error) {
+  console.error("Não foi possível recuperar o nome salvo neste navegador.", error);
+  document.querySelector("#login-error").textContent = "Não foi possível recuperar o nome salvo. Informe seu nome para continuar.";
+  document.querySelector("#login-error").hidden = false;
+}
 
 function recalculateFuelAverage() {
   const form = document.querySelector("#record-form");
@@ -676,4 +721,17 @@ function recalculateFuelAverage() {
   const prior = data.fuel.filter((entry) => entry.vehicleId === vehicleId && entry.km < km).sort((a, b) => b.km - a.km)[0];
   const averageInput = form.elements.namedItem("average");
   if (averageInput) averageInput.value = prior && liters > 0 ? ((km - prior.km) / liters).toFixed(1) : "";
+}
+
+function enterApp(name) {
+  currentUser = name;
+  document.querySelector("#user-name").textContent = name;
+  document.querySelector("#user-avatar").textContent = name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => Array.from(part)[0]?.toLocaleUpperCase("pt-BR") || "")
+    .join("");
+  document.querySelector("#login-screen").hidden = true;
+  document.querySelector("#app-shell").hidden = false;
+  renderPage();
 }

@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0b1220" />
+    <meta name="theme-color" content="#110d10" />
     <meta
       name="description"
-      content="Fleetwise — plataforma corporativa para gestão inteligente de frotas."
+      content="Ampernet Frotas — gestão inteligente de frotas corporativas."
     />
-    <title>Fleetwise — Gestão de Frotas</title>
+    <title>Ampernet Frotas — Gestão de Frotas</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -21,7 +21,7 @@
         theme: {
           extend: {
             colors: {
-              fleet: { blue: "#4d8dff", cyan: "#55d6e8", ink: "#0b1220" },
+              fleet: { blue: "#e53945", cyan: "#ff858a", ink: "#110d10" },
             },
             fontFamily: {
               sans: ["DM Sans", "sans-serif"],
@@ -37,11 +37,46 @@
   </head>
   <body>
     <div class="app-backdrop" aria-hidden="true"></div>
-    <div class="app-shell">
+    <section class="login-screen" id="login-screen">
+      <div class="login-panel">
+        <a class="login-brand" href="#" aria-label="Ampernet Frotas">
+          <span class="login-brand-mark"><i data-lucide="radio-tower"></i></span>
+          <span class="login-brand-name">Ampernet</span>
+          <span class="login-brand-divider"></span>
+          <span class="login-brand-product">GESTÃO<br />DE FROTAS</span>
+        </a>
+        <div class="login-content">
+          <span class="login-kicker"><span></span> PORTAL CORPORATIVO</span>
+          <h1>Bem-vindo à<br /><span>sua operação.</span></h1>
+          <p>Identifique-se para acessar o painel de gestão da frota Ampernet.</p>
+          <form id="login-form" class="login-form">
+            <label for="login-name">Como podemos chamar você?</label>
+            <div class="login-input-wrap">
+              <i data-lucide="user-round"></i>
+              <input id="login-name" name="name" type="text" placeholder="Digite seu nome completo" autocomplete="name" minlength="2" maxlength="80" required />
+            </div>
+            <p class="login-error" id="login-error" role="alert" hidden></p>
+            <button class="login-submit" type="submit">Acessar painel <i data-lucide="arrow-right"></i></button>
+          </form>
+          <div class="login-note"><i data-lucide="info"></i><span>Seu nome será lembrado neste navegador. Não é necessário informar e-mail ou senha.</span></div>
+        </div>
+        <div class="login-footer"><span>© <span id="login-year"></span> Ampernet</span><span>Inteligência para cada quilômetro.</span></div>
+      </div>
+      <div class="login-aside">
+        <div class="login-aside-badge"><span></span> GESTÃO INTELIGENTE DE FROTAS</div>
+        <div class="login-aside-copy">
+          <span>VISIBILIDADE DE PONTA A PONTA</span>
+          <h2>Cada rota.<br />Sob controle.</h2>
+          <p>Veículos, equipes e operação conectados em um só lugar.</p>
+        </div>
+        <div class="login-aside-bottom"><span>PLATAFORMA AMPERNET</span><span>01 — OPERAÇÃO</span></div>
+      </div>
+    </section>
+    <div class="app-shell" id="app-shell" hidden>
       <aside class="sidebar" id="sidebar">
-        <a class="brand" href="#" aria-label="Fleetwise início" data-page="dashboard">
-          <span class="brand-mark"><i data-lucide="navigation"></i></span>
-          <span class="brand-copy"><strong>fleetwise</strong><small>FLEET INTELLIGENCE</small></span>
+        <a class="brand" href="#" aria-label="Ampernet início" data-page="dashboard">
+          <span class="brand-mark"><i data-lucide="radio-tower"></i></span>
+          <span class="brand-copy"><strong>Ampernet</strong><small>GESTÃO DE FROTAS</small></span>
         </a>
 
         <div class="workspace-label">WORKSPACE</div>
@@ -59,14 +94,14 @@
             <div class="support-icon"><i data-lucide="life-buoy"></i></div>
             <strong>Precisa de ajuda?</strong>
             <span>Fale com nosso time de suporte.</span>
-            <a href="mailto:suporte@fleetwise.com">Acessar suporte <i data-lucide="arrow-up-right"></i></a>
+            <a href="mailto:suporte@ampernet.com.br">Acessar suporte <i data-lucide="arrow-up-right"></i></a>
           </div>
-          <button class="profile-button" aria-label="Perfil do usuário">
-            <span class="avatar">MC</span>
-            <span class="profile-copy"><strong>Marina Costa</strong><small>Administradora</small></span>
+          <button class="profile-button" id="user-profile" aria-label="Sair e trocar usuário" title="Sair e trocar usuário">
+            <span class="avatar" id="user-avatar">AM</span>
+            <span class="profile-copy"><strong id="user-name">Usuário</strong><small>Sair e trocar usuário</small></span>
             <i data-lucide="chevrons-up-down"></i>
           </button>
-          <div class="sidebar-version">FLEETWISE <span>•</span> V1.0.0</div>
+          <div class="sidebar-version">AMPERNET <span>•</span> V1.0.0</div>
         </div>
       </aside>
 
@@ -86,7 +121,7 @@
           </div>
         </header>
         <div class="content-area" id="app-content" aria-live="polite"></div>
-        <footer class="app-footer"><span>© <span id="copyright-year"></span> Fleetwise Technologies</span><span>Inteligência para cada quilômetro.</span></footer>
+        <footer class="app-footer"><span>© <span id="copyright-year"></span> Ampernet</span><span>Inteligência para cada quilômetro.</span></footer>
       </main>
     </div>
     <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
