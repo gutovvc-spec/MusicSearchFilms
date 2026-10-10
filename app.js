@@ -120,6 +120,12 @@ function vehicleName(id) {
   const item = vehicle(id);
   return item ? `${item.model} · ${item.plate}` : "Veículo removido";
 }
+function getTimeGreeting() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return "Bom dia";
+  if (hour >= 12 && hour < 18) return "Boa tarde";
+  return "Boa noite";
+}
 function setIcons() {
   if (window.lucide) window.lucide.createIcons();
 }
@@ -173,7 +179,7 @@ function renderDashboard() {
   const avgConsumption = monthlyFuel.length ? monthlyFuel.reduce((sum, item) => sum + Number(item.average), 0) / monthlyFuel.length : 0;
   const alerts = getAlerts();
   const recent = [...data.activities].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
-  return `${pageHeader("PAINEL EXECUTIVO", `Bom dia, ${escapeHtml(currentUser.split(/\s+/)[0] || "usuário")} <span aria-hidden='true'>✦</span>`, "Aqui está o resumo da operação da sua frota hoje.", button("Baixar relatório", "download", "data-action='export-summary'"))}
+  return `${pageHeader("PAINEL EXECUTIVO", `<span id="dashboard-greeting">${getTimeGreeting()}, ${escapeHtml(currentUser.split(/\s+/)[0] || "usuário")}</span> <span aria-hidden='true'>✦</span>`, "Aqui está o resumo da operação da sua frota hoje.", button("Baixar relatório", "download", "data-action='export-summary'"))}
     <section class="kpi-grid">
       ${kpi("Veículos na frota", number(total), "truck", `<span class="trend">● ${data.vehicles.filter((v) => v.status === "Disponível").length} disponíveis</span> no momento`)}
       ${kpi("Veículos em rota", number(onRoute), "route", `${total ? Math.round(onRoute / total * 100) : 0}% da frota em operação`, "#ff777e", "rgba(229,57,69,.15)")}
@@ -702,6 +708,12 @@ document.querySelector("#topbar-date").textContent = new Intl.DateTimeFormat("pt
 document.querySelector("#copyright-year").textContent = new Date().getFullYear();
 document.querySelector("#login-year").textContent = new Date().getFullYear();
 renderPage();
+window.setInterval(() => {
+  const greeting = document.querySelector("#dashboard-greeting");
+  if (greeting) {
+    greeting.textContent = `${getTimeGreeting()}, ${currentUser.split(/\s+/)[0] || "usuário"}`;
+  }
+}, 60_000);
 try {
   const savedUser = localStorage.getItem(USER_STORAGE_KEY)?.trim();
   if (savedUser) enterApp(savedUser);
