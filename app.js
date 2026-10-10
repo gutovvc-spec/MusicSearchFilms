@@ -7,7 +7,7 @@
  *    de site e API ativas no Google Cloud.
  */
 
-const YOUTUBE_API_KEY = "COLE_SUA_CHAVE_RESTRITA_AQUI";
+const YOUTUBE_API_KEY = "AIzaSyCtCClONMJJnTfWWGRJeORZHEYn52nkXEA";
 const YOUTUBE_API_ENDPOINT = "https://www.googleapis.com/youtube/v3/search";
 const YOUTUBE_SEARCH_LIMIT = 10;
 
