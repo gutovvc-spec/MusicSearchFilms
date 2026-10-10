@@ -16,7 +16,7 @@ Como a aplicação usa módulos JavaScript, abra a pasta em um servidor HTTP loc
 python -m http.server 8000
 ```
 
-Acesse `http://localhost:8000`. O nome da pessoa, os dados de demonstração e as alterações feitas na interface ficam no `localStorage` deste navegador.
+Acesse `http://localhost:8000`. A frota, os motoristas, os abastecimentos e as manutenções começam vazios. Ao abrir esta versão, os cadastros locais da versão demonstrativa anterior são removidos. O nome da pessoa e os novos registros ficam no `localStorage` deste navegador.
 
 ## Módulos disponíveis
 
@@ -28,7 +28,7 @@ Acesse `http://localhost:8000`. O nome da pessoa, os dados de demonstração e a
 - Relatórios por veículo, exportação CSV e impressão do navegador para salvar como PDF.
 - Layout adaptável para desktop, tablet e celular.
 
-Os registros iniciais são apenas dados demonstrativos. A aplicação funciona sem Supabase e não envia esses dados ao banco automaticamente.
+A aplicação começa sem registros de demonstração e funciona sem Supabase. Os dados cadastrados ficam apenas neste navegador; não são enviados ao banco automaticamente.
 
 ## Supabase
 

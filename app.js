@@ -1,51 +1,13 @@
-const STORAGE_KEY = "fleetwise-demo-v1";
+const STORAGE_KEY = "ampernet-fleet-data-v2";
+const LEGACY_STORAGE_KEY = "fleetwise-demo-v1";
 const USER_STORAGE_KEY = "ampernet-fleet-user";
 let currentUser = "";
-const today = new Date();
-const dateOffset = (days) => {
-  const value = new Date(today);
-  value.setDate(value.getDate() + days);
-  return value.toISOString().slice(0, 10);
-};
 const initialData = {
-  vehicles: [
-    { id: "v1", plate: "RJK-4A82", model: "Mercedes-Benz Sprinter", type: "Van", year: 2023, km: 48290, driverId: "d1", status: "Em rota" },
-    { id: "v2", plate: "FTR-9C17", model: "Volvo FH 460", type: "Caminhão", year: 2022, km: 124580, driverId: "d2", status: "Em rota" },
-    { id: "v3", plate: "GHT-2B64", model: "Toyota Hilux SRX", type: "Pickup", year: 2024, km: 21640, driverId: "d3", status: "Disponível" },
-    { id: "v4", plate: "MNP-7D03", model: "Volkswagen Delivery 11.180", type: "Caminhão", year: 2021, km: 98210, driverId: "d4", status: "Manutenção" },
-    { id: "v5", plate: "QAZ-8E51", model: "Fiat Ducato Cargo", type: "Van", year: 2023, km: 35770, driverId: "d5", status: "Em rota" },
-    { id: "v6", plate: "BVC-3F29", model: "Chevrolet S10 LTZ", type: "Pickup", year: 2022, km: 66900, driverId: "d6", status: "Disponível" },
-    { id: "v7", plate: "LKM-5G76", model: "Iveco Daily 35-160", type: "Van", year: 2024, km: 12830, driverId: "d1", status: "Em rota" },
-    { id: "v8", plate: "WSD-1H48", model: "Mercedes-Benz Atego 1719", type: "Caminhão", year: 2020, km: 156400, driverId: "d2", status: "Disponível" },
-  ],
-  drivers: [
-    { id: "d1", name: "Rafael Mendes", category: "D", licenseExpiry: dateOffset(146), phone: "(11) 99842-7610", status: "Ativo" },
-    { id: "d2", name: "Carlos Eduardo", category: "E", licenseExpiry: dateOffset(18), phone: "(11) 99173-2048", status: "Ativo" },
-    { id: "d3", name: "Juliana Ferreira", category: "C", licenseExpiry: dateOffset(255), phone: "(11) 99712-5583", status: "Ativo" },
-    { id: "d4", name: "André Oliveira", category: "D", licenseExpiry: dateOffset(-12), phone: "(11) 98846-9032", status: "Ativo" },
-    { id: "d5", name: "Marcos Vinícius", category: "E", licenseExpiry: dateOffset(93), phone: "(11) 99921-1840", status: "Ativo" },
-    { id: "d6", name: "Patrícia Almeida", category: "B", licenseExpiry: dateOffset(32), phone: "(11) 98413-6755", status: "Ativo" },
-  ],
-  maintenance: [
-    { id: "m1", vehicleId: "v4", kind: "Corretiva", date: dateOffset(-2), description: "Troca de pastilhas de freio", parts: "Pastilhas dianteiras", cost: 1840, nextKm: 103000, kmAtService: 98210, status: "Em andamento" },
-    { id: "m2", vehicleId: "v2", kind: "Preventiva", date: dateOffset(-18), description: "Revisão de 120.000 km", parts: "Óleo, filtros e correia", cost: 3280, nextKm: 135000, kmAtService: 120400, status: "Concluída" },
-    { id: "m3", vehicleId: "v5", kind: "Preventiva", date: dateOffset(-32), description: "Revisão programada", parts: "Óleo e filtros", cost: 960, nextKm: 40000, kmAtService: 33700, status: "Concluída" },
-    { id: "m4", vehicleId: "v8", kind: "Corretiva", date: dateOffset(-45), description: "Sistema de arrefecimento", parts: "Bomba d'água", cost: 2460, nextKm: 160000, kmAtService: 154800, status: "Concluída" },
-  ],
-  fuel: [
-    { id: "f1", vehicleId: "v1", date: dateOffset(-1), liters: 72, total: 446.4, station: "Posto Rota 66", km: 48290, average: 8.4 },
-    { id: "f2", vehicleId: "v2", date: dateOffset(-2), liters: 180, total: 1080, station: "Rede Estradão", km: 124580, average: 3.1 },
-    { id: "f3", vehicleId: "v3", date: dateOffset(-3), liters: 58, total: 359.6, station: "Posto Central", km: 21640, average: 9.8 },
-    { id: "f4", vehicleId: "v5", date: dateOffset(-4), liters: 80, total: 504, station: "Rede Estradão", km: 35770, average: 7.7 },
-    { id: "f5", vehicleId: "v7", date: dateOffset(-6), liters: 67, total: 415.4, station: "Auto Posto Avenida", km: 12830, average: 8.2 },
-    { id: "f6", vehicleId: "v6", date: dateOffset(-8), liters: 61, total: 378.2, station: "Posto Central", km: 66900, average: 9.1 },
-  ],
-  activities: [
-    { id: "a1", type: "route", title: "Veículo saiu para rota", detail: "RJK-4A82 · Rafael Mendes · São Paulo → Campinas", date: dateOffset(0), time: "09:42" },
-    { id: "a2", type: "success", title: "Abastecimento registrado", detail: "FTR-9C17 · Rede Estradão · 180 litros", date: dateOffset(0), time: "09:18" },
-    { id: "a3", type: "warning", title: "CNH próxima do vencimento", detail: "Carlos Eduardo · vence em breve", date: dateOffset(0), time: "08:56" },
-    { id: "a4", type: "route", title: "Retorno confirmado", detail: "GHT-2B64 · Juliana Ferreira", date: dateOffset(-1), time: "Ontem" },
-  ],
+  vehicles: [],
+  drivers: [],
+  maintenance: [],
+  fuel: [],
+  activities: [],
 };
 
 const pageTitles = {
@@ -73,6 +35,8 @@ let toastTimer;
 
 function loadData() {
   try {
+    // Remove os dados demonstrativos e cadastros locais da versao anterior.
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
     const saved = localStorage.getItem(STORAGE_KEY);
     return saved ? { ...structuredClone(initialData), ...JSON.parse(saved) } : structuredClone(initialData);
   } catch (error) {
@@ -184,7 +148,7 @@ function renderDashboard() {
       ${kpi("Veículos na frota", number(total), "truck", `<span class="trend">● ${data.vehicles.filter((v) => v.status === "Disponível").length} disponíveis</span> no momento`)}
       ${kpi("Veículos em rota", number(onRoute), "route", `${total ? Math.round(onRoute / total * 100) : 0}% da frota em operação`, "#ff777e", "rgba(229,57,69,.15)")}
       ${kpi("Em manutenção", number(inMaintenance), "wrench", `${data.maintenance.filter((m) => m.status === "Em andamento").length} ordem(ns) em aberto`, "#f3b95c", "rgba(243,185,92,.13)")}
-      ${kpi("Consumo médio", avgConsumption ? `${avgConsumption.toFixed(1).replace(".", ",")} <small style="font-size:12px;color:#91a1b7">km/L</small>` : "—", "fuel", `${number(Math.round(liters))} litros registrados no mês`, "#ff858a", "rgba(229,57,69,.12)")}
+      ${kpi("Consumo médio", `${avgConsumption.toFixed(1).replace(".", ",")} <small style="font-size:12px;color:#91a1b7">km/L</small>`, "fuel", `${number(Math.round(liters))} litros registrados no mês`, "#ff858a", "rgba(229,57,69,.12)")}
       ${kpi("Alertas pendentes", number(alerts), "bell-ring", "CNHs e revisões que precisam de atenção", alerts ? "#ff9aa7" : "#39d6a1", alerts ? "rgba(255,113,130,.14)" : "rgba(57,214,161,.12)")}
     </section>
     <section class="dashboard-grid">
