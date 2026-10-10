@@ -6,9 +6,9 @@
     <meta name="theme-color" content="#101010" />
     <meta
       name="description"
-      content="Encontre trilhas sonoras de filmes e crie playlists no Spotify."
+      content="Encontre e assista no YouTube a músicas e trilhas sonoras de filmes."
     />
-    <title>Frame — trilhas sonoras no Spotify</title>
+    <title>Frame — músicas de filmes no YouTube</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -27,16 +27,6 @@
         <span class="brand-icon" aria-hidden="true">f</span>
         <span>frame<span class="brand-period">.</span></span>
       </a>
-      <div class="account">
-        <span class="account-status" id="account-status">Spotify desconectado</span>
-        <button class="button button-connect" id="connect-button" type="button">
-          <span class="spotify-mark" aria-hidden="true">●</span>
-          Conectar ao Spotify
-        </button>
-        <button class="button button-quiet" id="disconnect-button" type="button" hidden>
-          Desconectar
-        </button>
-      </div>
     </header>
 
     <main class="page">
@@ -44,8 +34,8 @@
         <p class="eyebrow"><span class="eyebrow-line"></span> CINEMA ENCONTRA MÚSICA</p>
         <h1 id="page-title">O filme acaba.<br />A música <span>fica.</span></h1>
         <p class="intro">
-          Reúna as trilhas sonoras e músicas associadas ao filme; depois, toque cada
-          faixa pelo YouTube ou abra a playlist no Spotify.
+          Encontre músicas que aparecem no filme, além de faixas da trilha sonora,
+          e assista aos vídeos diretamente pelo YouTube.
         </p>
 
         <form class="search-form" id="movie-form">
@@ -61,24 +51,21 @@
             required
           />
           <button class="button button-generate" id="generate-button" type="submit">
-            Gerar playlist <span aria-hidden="true">↗</span>
+            Buscar no YouTube <span aria-hidden="true">↗</span>
           </button>
         </form>
-        <p class="form-hint" id="form-hint">Conecte sua conta do Spotify para começar.</p>
-        <aside class="service-note" aria-label="Informações sobre contas Spotify Free">
+        <p class="form-hint" id="form-hint">Digite o nome de um filme para encontrar vídeos no YouTube.</p>
+        <aside class="service-note" aria-label="Informações sobre a busca no YouTube">
           <span class="service-note-icon" aria-hidden="true">i</span>
           <p>
-            O app reúne faixas de álbuns de trilha sonora e músicas encontradas no
-            Spotify; os resultados podem ser aproximados. O Spotify não informa
-            oficialmente em quais cenas cada música toca. Para testar em modo de
-            desenvolvimento, o proprietário do app precisa ter Premium e adicionar
-            cada conta de teste em <em>Users Management</em> no Dashboard.
+            A busca combina vídeos de músicas do filme e álbuns de trilha sonora.
+            Os resultados são do YouTube e podem incluir versões, covers ou vídeos
+            que não correspondem à cena exata.
           </p>
         </aside>
         <p class="youtube-note">
-          Ouça as faixas pelo player do YouTube. Configure uma chave gratuita da
-          YouTube Data API no <code>app.js</code>; limite-a ao seu site e à API do YouTube
-          no Google Cloud. A reprodução pode incluir anúncios.
+          Configure uma chave da YouTube Data API no <code>app.js</code>, restringindo-a
+          ao seu site e à YouTube Data API v3 no Google Cloud. O YouTube pode exibir anúncios.
         </p>
       </section>
 
@@ -92,26 +79,17 @@
       <section class="results" id="results" aria-labelledby="results-heading" hidden>
         <div class="results-heading">
           <div>
-            <p class="eyebrow">SUA PRÓXIMA SESSÃO</p>
-            <h2 id="results-heading">Trilha sonora e músicas</h2>
+            <p class="eyebrow">RESULTADOS DO YOUTUBE</p>
+            <h2 id="results-heading">Músicas do filme</h2>
           </div>
-          <a
-            class="button button-open"
-            id="playlist-link"
-            href="#"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Abrir no Spotify <span aria-hidden="true">↗</span>
-          </a>
         </div>
         <p class="playlist-caption" id="playlist-caption"></p>
         <section class="youtube-player" id="youtube-player" aria-label="Player do YouTube" hidden>
           <div class="youtube-player-heading">
             <span class="youtube-badge" aria-hidden="true">▶</span>
             <div>
-              <strong id="youtube-track-title">Tocar no YouTube</strong>
-              <span id="youtube-status" aria-live="polite">Escolha uma faixa para reproduzir.</span>
+              <strong id="youtube-track-title">Escolha um vídeo</strong>
+              <span id="youtube-status" aria-live="polite">A reprodução aparecerá aqui.</span>
             </div>
           </div>
           <div class="youtube-frame-wrap">
@@ -138,7 +116,7 @@
 
       <footer class="footer">
         <span>Feito para quem leva a música do cinema para casa.</span>
-        <span>YouTube para ouvir · Spotify para salvar</span>
+        <span>Busca e reprodução pelo YouTube</span>
       </footer>
     </main>
   </body>
