@@ -20,6 +20,7 @@ const VERIFIER_STORAGE_KEY = "frame-spotify-verifier";
 const STATE_STORAGE_KEY = "frame-spotify-state";
 const SCOPES = ["playlist-modify-private", "user-read-private"];
 const MAX_PLAYLIST_TRACKS = 100;
+const SPOTIFY_SEARCH_LIMIT = 10;
 const IGNORED_TITLE_WORDS = new Set(["a", "as", "o", "os", "de", "do", "da", "dos", "das", "e", "the", "of", "and", "in", "to"]);
 
 const elements = {
@@ -295,7 +296,11 @@ async function searchTracks(movieTitle) {
   const tracksById = new Map();
 
   for (const query of getSearchQueries(movieTitle)) {
-    const parameters = new URLSearchParams({ q: query, type: "track", limit: "20" });
+    const parameters = new URLSearchParams({
+      q: query,
+      type: "track",
+      limit: String(SPOTIFY_SEARCH_LIMIT),
+    });
     const result = await spotifyRequest(`/search?${parameters.toString()}`);
     for (const track of result.tracks.items) {
       const candidateText = `${track.name} ${track.album.name}`;
