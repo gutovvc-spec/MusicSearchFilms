@@ -8,9 +8,17 @@
  * Contas Spotify Free podem criar playlists; no modo de desenvolvimento, o
  * proprietário do app precisa de Premium e as contas de teste devem ser permitidas.
  * Este app usa Authorization Code com PKCE; não crie nem exponha um Client Secret.
+ *
+ * Configuração do player do YouTube:
+ * 1. Ative "YouTube Data API v3" em https://console.cloud.google.com/.
+ * 2. Crie uma chave de API e restrinja-a ao HTTP referrer do Live Server
+ *    (por exemplo, http://127.0.0.1:5500/*) e somente à YouTube Data API v3.
+ * 3. Informe a chave em YOUTUBE_API_KEY. A chave fica visível no navegador,
+ *    então as restrições no Google Cloud são essenciais.
  */
 
 const SPOTIFY_CLIENT_ID = "b06784a9d22243c78f5dc55d9f8af263";
+const YOUTUBE_API_KEY = "AIzaSyCtCClONMJJnTfWWGRJeORZHEYn52nkXEA";
 const REDIRECT_URI = `${window.location.origin}${window.location.pathname}`;
 const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
 const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
@@ -20,7 +28,9 @@ const VERIFIER_STORAGE_KEY = "frame-spotify-verifier";
 const STATE_STORAGE_KEY = "frame-spotify-state";
 const SCOPES = ["playlist-modify-private", "user-read-private"];
 const MAX_PLAYLIST_TRACKS = 100;
+const YOUTUBE_API_ENDPOINT = "https://www.googleapis.com/youtube/v3/search";
 const SPOTIFY_SEARCH_LIMIT = 10;
+const MAX_SOUNDTRACK_ALBUMS = 3;
 const IGNORED_TITLE_WORDS = new Set(["a", "as", "o", "os", "de", "do", "da", "dos", "das", "e", "the", "of", "and", "in", "to"]);
 
 const elements = {
@@ -38,7 +48,14 @@ const elements = {
   playlistLink: document.querySelector("#playlist-link"),
   playlistCaption: document.querySelector("#playlist-caption"),
   trackList: document.querySelector("#track-list"),
+  youtubePlayer: document.querySelector("#youtube-player"),
+  youtubeFrame: document.querySelector("#youtube-frame"),
+  youtubeTrackTitle: document.querySelector("#youtube-track-title"),
+  youtubeStatus: document.querySelector("#youtube-status"),
+  youtubeFallback: document.querySelector("#youtube-fallback"),
 };
+
+let currentTracks = [];
 
 function getStoredToken() {
   const saved = sessionStorage.getItem(TOKEN_STORAGE_KEY);
@@ -68,7 +85,7 @@ function updateAccountUi() {
   elements.generateButton.disabled = !connected;
   elements.movieTitle.disabled = !connected;
   elements.formHint.textContent = connected
-    ? "Vamos buscar faixas relacionadas ao filme no Spotify."
+    ? "Vamos buscar trilhas sonoras e músicas relacionadas ao filme."
     : "Conecte sua conta do Spotify para começar.";
 }
 
@@ -292,6 +309,61 @@ function getSearchQueries(movieTitle) {
   ];
 }
 
+function getAlbumSearchQueries(movieTitle) {
+  return [
+    `${movieTitle} original motion picture soundtrack`,
+    `${movieTitle} soundtrack`,
+    `${movieTitle} film score`,
+  ];
+}
+
+async function searchSoundtrackAlbums(movieTitle) {
+  const albumsById = new Map();
+
+  for (const query of getAlbumSearchQueries(movieTitle)) {
+    const parameters = new URLSearchParams({
+      q: query,
+      type: "album",
+      limit: String(SPOTIFY_SEARCH_LIMIT),
+    });
+    const result = await spotifyRequest(`/search?${parameters.toString()}`);
+    for (const album of result.albums.items) {
+      const candidateText = `${album.name} ${album.artists.map((artist) => artist.name).join(" ")}`;
+      const score = relevanceScore(candidateText, movieTitle);
+      if (score > 0) albumsById.set(album.id, { album, score });
+    }
+  }
+
+  return Array.from(albumsById.values())
+    .sort((first, second) => second.score - first.score)
+    .slice(0, MAX_SOUNDTRACK_ALBUMS)
+    .map(({ album }) => album);
+}
+
+async function getSoundtrackAlbumTracks(album) {
+  const tracks = [];
+  let next = `/albums/${encodeURIComponent(album.id)}/tracks?limit=${SPOTIFY_SEARCH_LIMIT}`;
+
+  while (next && tracks.length < MAX_PLAYLIST_TRACKS) {
+    const page = await spotifyRequest(next);
+    tracks.push(
+      ...page.items
+        .filter((track) => track.uri && track.is_playable !== false)
+        .map((track) => ({
+          ...track,
+          album: {
+            name: album.name,
+            images: album.images,
+            external_urls: album.external_urls,
+          },
+        })),
+    );
+    next = page.next?.replace(API_BASE, "") || null;
+  }
+
+  return tracks.slice(0, MAX_PLAYLIST_TRACKS);
+}
+
 async function searchTracks(movieTitle) {
   const tracksById = new Map();
 
@@ -321,14 +393,29 @@ async function searchTracks(movieTitle) {
     .map(({ track }) => track);
 }
 
-async function findFeaturedSongs(movieTitle) {
-  const tracks = await searchTracks(movieTitle);
+async function findMovieMusic(movieTitle) {
+  const albums = await searchSoundtrackAlbums(movieTitle);
+  const soundtrackTracks = [];
+
+  for (const album of albums) {
+    soundtrackTracks.push(...await getSoundtrackAlbumTracks(album));
+    if (soundtrackTracks.length >= MAX_PLAYLIST_TRACKS) break;
+  }
+
+  const individualTracks = await searchTracks(movieTitle);
+  const uniqueTracks = new Map();
+  for (const track of [...soundtrackTracks, ...individualTracks]) {
+    if (uniqueTracks.size >= MAX_PLAYLIST_TRACKS) break;
+    uniqueTracks.set(track.id || track.uri, track);
+  }
+  const tracks = Array.from(uniqueTracks.values());
   if (tracks.length) return tracks;
 
-  throw new Error(`Não encontrei músicas relacionadas a "${movieTitle}" no Spotify. Tente outro título ou confira a grafia.`);
+  throw new Error(`Não encontrei trilhas sonoras ou músicas relacionadas a "${movieTitle}" no Spotify. Tente outro título ou confira a grafia.`);
 }
 
 function renderTracks(tracks) {
+  currentTracks = tracks;
   elements.trackList.replaceChildren();
 
   for (const [index, track] of tracks.entries()) {
@@ -359,14 +446,81 @@ function renderTracks(tracks) {
     albumName.className = "track-album";
     albumName.textContent = track.album.name;
 
-    row.append(number, image, meta, albumName);
+    const playButton = document.createElement("button");
+    playButton.className = "button button-youtube";
+    playButton.type = "button";
+    playButton.dataset.trackIndex = String(index);
+    playButton.setAttribute("aria-label", `Tocar ${track.name} no YouTube`);
+    playButton.innerHTML = '<span aria-hidden="true">▶</span><span class="youtube-button-label">YouTube</span>';
+
+    row.append(number, image, meta, albumName, playButton);
     elements.trackList.append(row);
+  }
+}
+
+async function playOnYouTube(track, button) {
+  elements.youtubePlayer.hidden = false;
+  elements.youtubeFrame.hidden = true;
+  elements.youtubeFrame.removeAttribute("src");
+  elements.youtubeFallback.hidden = true;
+  elements.youtubeTrackTitle.textContent = `${track.name} — ${track.artists.map((artist) => artist.name).join(", ")}`;
+  elements.youtubeStatus.textContent = "Buscando vídeo no YouTube...";
+  button.disabled = true;
+
+  const query = `${track.name} ${track.artists.map((artist) => artist.name).join(" ")} official audio`;
+  elements.youtubeFallback.href = `https://www.youtube.com/results?${new URLSearchParams({ search_query: query })}`;
+
+  if (!YOUTUBE_API_KEY || YOUTUBE_API_KEY === "INSIRA_SUA_CHAVE_DA_YOUTUBE_DATA_API_AQUI") {
+    elements.youtubeStatus.textContent = "Configure a chave da YouTube Data API no início de app.js para buscar vídeos.";
+    elements.youtubeFallback.hidden = false;
+    button.disabled = false;
+    elements.youtubePlayer.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+
+  try {
+    const parameters = new URLSearchParams({
+      key: YOUTUBE_API_KEY,
+      part: "snippet",
+      q: query,
+      type: "video",
+      videoEmbeddable: "true",
+      videoSyndicated: "true",
+      maxResults: "5",
+    });
+    const response = await fetch(`${YOUTUBE_API_ENDPOINT}?${parameters.toString()}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      const apiMessage = data.error?.message || `erro ${response.status}`;
+      throw new Error(apiMessage);
+    }
+
+    const videoId = data.items?.[0]?.id?.videoId;
+    if (!videoId) {
+      elements.youtubeStatus.textContent = "Não encontrei um vídeo incorporável para esta faixa.";
+      elements.youtubeFallback.hidden = false;
+      return;
+    }
+
+    elements.youtubeFrame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
+    elements.youtubeFrame.title = `YouTube: ${track.name}`;
+    elements.youtubeFrame.hidden = false;
+    elements.youtubeStatus.textContent = "Reprodução pelo YouTube. Alguns vídeos podem não permitir incorporação.";
+    elements.youtubeFallback.href = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+    elements.youtubeFallback.hidden = false;
+  } catch (error) {
+    elements.youtubeStatus.textContent = `Não foi possível carregar o vídeo: ${error.message}`;
+    elements.youtubeFallback.hidden = false;
+  } finally {
+    button.disabled = false;
+    elements.youtubePlayer.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 }
 
 function renderPlaylist(playlist, tracks, movieTitle) {
   elements.playlistLink.href = playlist.external_urls.spotify;
-  elements.playlistCaption.textContent = `${tracks.length} faixas · playlist privada · resultados aproximados do Spotify`;
+  elements.playlistCaption.textContent = `${tracks.length} faixas · trilhas sonoras e músicas encontradas no Spotify · playlist privada`;
   elements.results.hidden = false;
   renderTracks(tracks);
   elements.results.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -374,14 +528,14 @@ function renderPlaylist(playlist, tracks, movieTitle) {
 }
 
 async function generatePlaylist(movieTitle) {
-  const tracks = await findFeaturedSongs(movieTitle);
+  const tracks = await findMovieMusic(movieTitle);
   setLoading(true, "Criando sua playlist...");
 
   const playlist = await spotifyRequest("/me/playlists", {
     method: "POST",
     body: JSON.stringify({
-      name: `${movieTitle} — Músicas do filme`,
-      description: `Faixas encontradas no Spotify a partir da busca por músicas associadas ao filme ${movieTitle}.`,
+      name: `${movieTitle} — Trilha sonora e músicas`,
+      description: `Faixas de álbuns de trilha sonora e músicas associadas a ${movieTitle}, encontradas no Spotify.`,
       public: false,
     }),
   });
@@ -423,6 +577,8 @@ elements.form.addEventListener("submit", async (event) => {
 
   hideMessage();
   elements.results.hidden = true;
+  elements.youtubePlayer.hidden = true;
+  elements.youtubeFrame.removeAttribute("src");
   setLoading(true);
 
   try {
@@ -432,6 +588,13 @@ elements.form.addEventListener("submit", async (event) => {
   } finally {
     setLoading(false);
   }
+});
+
+elements.trackList.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-track-index]");
+  if (!button) return;
+  const track = currentTracks[Number(button.dataset.trackIndex)];
+  if (track) playOnYouTube(track, button);
 });
 
 async function initialize() {

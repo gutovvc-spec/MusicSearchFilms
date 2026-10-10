@@ -44,8 +44,8 @@
         <p class="eyebrow"><span class="eyebrow-line"></span> CINEMA ENCONTRA MÚSICA</p>
         <h1 id="page-title">O filme acaba.<br />A música <span>fica.</span></h1>
         <p class="intro">
-          Encontre músicas associadas a um filme e reúna as faixas em uma playlist
-          pronta para ouvir no Spotify.
+          Reúna as trilhas sonoras e músicas associadas ao filme; depois, toque cada
+          faixa pelo YouTube ou abra a playlist no Spotify.
         </p>
 
         <form class="search-form" id="movie-form">
@@ -68,14 +68,18 @@
         <aside class="service-note" aria-label="Informações sobre contas Spotify Free">
           <span class="service-note-icon" aria-hidden="true">i</span>
           <p>
-            <strong>Funciona com Spotify Free.</strong> Você pode criar e salvar playlists,
-            mas a reprodução acontece no app do Spotify. A busca usa somente faixas do
-            Spotify e é aproximada: ele não informa oficialmente em quais cenas cada
-            música toca. Para testar em modo de desenvolvimento, o proprietário do app
-            precisa ter Premium e adicionar cada conta de teste em
-            <em>Users Management</em> no Dashboard.
+            O app reúne faixas de álbuns de trilha sonora e músicas encontradas no
+            Spotify; os resultados podem ser aproximados. O Spotify não informa
+            oficialmente em quais cenas cada música toca. Para testar em modo de
+            desenvolvimento, o proprietário do app precisa ter Premium e adicionar
+            cada conta de teste em <em>Users Management</em> no Dashboard.
           </p>
         </aside>
+        <p class="youtube-note">
+          Ouça as faixas pelo player do YouTube. Configure uma chave gratuita da
+          YouTube Data API no <code>app.js</code>; limite-a ao seu site e à API do YouTube
+          no Google Cloud. A reprodução pode incluir anúncios.
+        </p>
       </section>
 
       <section class="loading" id="loading" aria-live="polite" hidden>
@@ -89,7 +93,7 @@
         <div class="results-heading">
           <div>
             <p class="eyebrow">SUA PRÓXIMA SESSÃO</p>
-            <h2 id="results-heading">Músicas do filme</h2>
+            <h2 id="results-heading">Trilha sonora e músicas</h2>
           </div>
           <a
             class="button button-open"
@@ -102,12 +106,39 @@
           </a>
         </div>
         <p class="playlist-caption" id="playlist-caption"></p>
+        <section class="youtube-player" id="youtube-player" aria-label="Player do YouTube" hidden>
+          <div class="youtube-player-heading">
+            <span class="youtube-badge" aria-hidden="true">▶</span>
+            <div>
+              <strong id="youtube-track-title">Tocar no YouTube</strong>
+              <span id="youtube-status" aria-live="polite">Escolha uma faixa para reproduzir.</span>
+            </div>
+          </div>
+          <div class="youtube-frame-wrap">
+            <iframe
+              id="youtube-frame"
+              title="Reprodutor do YouTube"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen
+              hidden
+            ></iframe>
+          </div>
+          <a
+            class="youtube-fallback"
+            id="youtube-fallback"
+            href="https://www.youtube.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            hidden
+          >Abrir no YouTube ↗</a>
+        </section>
         <div class="track-list" id="track-list"></div>
       </section>
 
       <footer class="footer">
         <span>Feito para quem leva a música do cinema para casa.</span>
-        <span>Reproduzido pelo Spotify</span>
+        <span>YouTube para ouvir · Spotify para salvar</span>
       </footer>
     </main>
   </body>
