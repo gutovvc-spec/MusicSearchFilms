@@ -26,6 +26,10 @@
    interface disponível offline depois do primeiro carregamento. Instale pelo
    menu do navegador; a busca no YouTube e a reprodução de vídeos continuam
    precisando de conexão com a internet.
+6. A lista de favoritas fica salva no armazenamento local do navegador. Os
+   controles da tela de bloqueio dependem do suporte do navegador à Media
+   Session API. O botão Picture-in-Picture usa a API Document Picture-in-Picture
+   quando disponível; em navegadores incompatíveis, abra o vídeo no YouTube.
 
 Não coloque a chave em `app.js`, `index.html`, no repositório ou em variáveis
 prefixadas com `VITE_`/`NEXT_PUBLIC_`. O navegador chama `/api/youtube-search`;
