@@ -22,6 +22,10 @@
    - Ambiente: Production (e Preview/Development se também for usar esses ambientes).
 4. Salve e faça um novo deploy. A busca fica disponível no domínio `.vercel.app`
    atribuído ao projeto.
+5. O site oferece instalação como PWA em navegadores compatíveis e mantém a
+   interface disponível offline depois do primeiro carregamento. Instale pelo
+   menu do navegador; a busca no YouTube e a reprodução de vídeos continuam
+   precisando de conexão com a internet.
 
 Não coloque a chave em `app.js`, `index.html`, no repositório ou em variáveis
 prefixadas com `VITE_`/`NEXT_PUBLIC_`. O navegador chama `/api/youtube-search`;

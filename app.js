@@ -328,3 +328,11 @@ elements.videoList.addEventListener("click", (event) => {
   const video = currentVideos[Number(button.dataset.videoIndex)];
   if (video) playVideo(video, Number(button.dataset.videoIndex));
 });
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch((error) => {
+      console.error("Não foi possível registrar o service worker:", error);
+    });
+  });
+}
