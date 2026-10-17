@@ -1,14 +1,13 @@
-const CACHE_PREFIX = "music-search-films-";
-const CACHE_NAME = `${CACHE_PREFIX}v2`;
+const CACHE_PREFIX = "minhas-musicas-";
+const CACHE_NAME = `${CACHE_PREFIX}v4`;
 const APP_SHELL = [
   "./",
   "./index.html",
   "./style.css",
   "./app.js",
+  "./supabase-config.js",
   "./manifest.webmanifest",
   "./icon.svg",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -40,7 +39,8 @@ self.addEventListener("fetch", (event) => {
   if (
     request.method !== "GET" ||
     url.origin !== self.location.origin ||
-    url.pathname.startsWith("/api/")
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/supabase/")
   ) {
     return;
   }

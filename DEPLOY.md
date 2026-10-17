@@ -1,45 +1,58 @@
-# Publicar Music Search Films no Vercel
+# Minhas Músicas
 
-## Antes de publicar
+Aplicativo instalável (PWA) para organizar playlists pessoais e arquivos de
+áudio no celular ou computador. Sem configurar o Supabase, a biblioteca e os
+arquivos importados ficam apenas no navegador/dispositivo. Com Supabase, playlists,
+curtidas e arquivos de áudio autorizados podem ser sincronizados após o login.
 
-1. No Google Cloud, ative a **YouTube Data API v3** e crie uma chave nova.
-2. Restrinja a chave à **YouTube Data API v3** em "Restrições de API". Como as
-   chamadas são feitas pelo servidor Vercel, não use a restrição de site HTTP
-   referrer nem uma restrição de endereço IP local.
-3. A chave que estava anteriormente no JavaScript do navegador deve ser revogada
-   no Google Cloud. Uma chave incluída no frontend fica pública e não deve ser
-   reutilizada.
+## Publicar
 
-## Implantação
+O app é estático e pode ser servido por HTTPS em Vercel, Netlify, GitHub Pages ou
+outro host estático. HTTPS (ou `localhost` durante o desenvolvimento) é necessário
+para instalar o PWA e usar o service worker.
 
-1. Envie este projeto para um repositório GitHub.
-2. Em [vercel.com](https://vercel.com/), importe o repositório como um novo projeto.
-   O Vercel publica `index.html`, `style.css` e `app.js` como site estático e
-   detecta automaticamente a função em `api/youtube-search.js`.
-3. Nas configurações do projeto, abra **Settings → Environment Variables** e crie:
-   - Nome: `YOUTUBE_API_KEY`
-   - Valor: a chave criada no Google Cloud.
-   - Ambiente: Production (e Preview/Development se também for usar esses ambientes).
-4. Salve e faça um novo deploy. A busca fica disponível no domínio `.vercel.app`
-   atribuído ao projeto.
-5. O site oferece instalação como PWA em navegadores compatíveis e mantém a
-   interface disponível offline depois do primeiro carregamento. Instale pelo
-   menu do navegador; a busca no YouTube e a reprodução de vídeos continuam
-   precisando de conexão com a internet.
-6. A lista de favoritas fica salva no armazenamento local do navegador. Os
-   controles da tela de bloqueio dependem do suporte do navegador à Media
-   Session API. O botão Picture-in-Picture usa a API Document Picture-in-Picture
-   quando disponível; em navegadores incompatíveis, abra o vídeo no YouTube.
+## Habilitar sincronização Supabase
 
-Não coloque a chave em `app.js`, `index.html`, no repositório ou em variáveis
-prefixadas com `VITE_`/`NEXT_PUBLIC_`. O navegador chama `/api/youtube-search`;
-a função serverless acrescenta a chave no servidor.
+1. Crie um projeto no [Supabase](https://supabase.com/).
+2. No SQL Editor do projeto, execute [supabase/schema.sql](./supabase/schema.sql).
+   Isso cria a tabela com Row Level Security e o bucket privado de áudio.
+3. Copie a Project URL e a chave **anon/public** em Project Settings → API e
+   preencha `url` e `anonKey` em `supabase-config.js`.
+   A chave anon é usada no navegador; nunca use nem publique a chave `service_role`.
+4. Em Authentication → URL Configuration, configure o Site URL e os Redirect URLs
+   para o domínio publicado e para `http://localhost` durante desenvolvimento.
+5. Em Authentication → Providers, habilite Email. As configurações de confirmação
+   de e-mail e senha são controladas pelo projeto Supabase.
+6. Publique ou atualize o site. Crie uma conta no app; use a mesma conta nos dois
+   dispositivos para sincronizar. Ao entrar, as playlists locais são enviadas para
+   sua conta e a biblioteca da conta é carregada.
 
-## Teste local
+O bucket `music-files` é privado. O limite de upload configurado no schema é 40 MB
+por arquivo. Se o projeto exigir outro limite, ajuste tanto o bucket no Supabase
+quanto `MAX_AUDIO_BYTES` em `app.js`.
 
-O Live Server serve apenas arquivos estáticos e não executa a função `/api`.
-Para testar a aplicação localmente, instale/execute a CLI do Vercel, configure
-`YOUTUBE_API_KEY` no ambiente local e rode `vercel dev` na pasta do projeto.
+## Playlists e arquivos
 
-O Supabase não foi incluído: este site não precisa de banco de dados ou contas
-de usuário para pesquisar e reproduzir vídeos.
+- Cole links diretos de playlist, faixa, álbum ou vídeo do Spotify/YouTube. O app
+  incorpora o player oficial quando o link é compatível. Conteúdo desses serviços
+  requer internet e pode exigir uma conta do próprio serviço.
+- Dentro de uma playlist, use **Adicionar link de música** para incluir links de
+  faixas, vídeos ou playlists do YouTube/Spotify. Ao selecionar um item, o player
+  oficial correspondente aparece na playlist.
+- O app não extrai nem baixa áudio de links do Spotify ou YouTube. O botão de
+  download só aparece para arquivos de áudio pessoais/importados.
+- Sem login, arquivos de áudio são guardados no IndexedDB do navegador e não são
+  sincronizados. Com login, arquivos são enviados ao bucket privado do Supabase.
+- A instalação PWA mantém a interface disponível offline; streaming dos players e
+  sincronização exigem conexão. Arquivos locais guardados no IndexedDB podem tocar
+  offline no dispositivo onde foram importados.
+- Cores, imagem de fundo, playlists e arquivos locais são específicos do navegador
+  até o login. As imagens de fundo escolhidas no dispositivo ficam no armazenamento
+  local e não são enviadas ao Supabase.
+
+## Desenvolvimento local
+
+Sirva a pasta do projeto em `http://localhost` usando um servidor estático. Abrir
+`index.html` diretamente como `file://` não habilita PWA, autenticação ou storage.
+As chaves Supabase preenchidas em `supabase-config.js` são públicas; proteja o
+banco e o bucket com as políticas RLS do schema.
